@@ -5,7 +5,7 @@ import { useToast } from '../components/Toast'
 
 // ─── Exchange Widget ───────────────────────────────────────
 function ExchangeWidget({ diamonds, coins, userId, onSuccess, addToast }) {
-  const { addToast } = useToast()
+  // const { addToast } = useToast()
   const [amount, setAmount] = useState(10)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
@@ -80,6 +80,7 @@ function ExchangeWidget({ diamonds, coins, userId, onSuccess, addToast }) {
 
 // ─── Main Profile Component ────────────────────────────────
 export default function Profile() {
+  const { addToast } = useToast()
   const [user, setUser] = useState(null)
   const [activeTab, setActiveTab] = useState('overview')
   const [editing, setEditing] = useState(false)
