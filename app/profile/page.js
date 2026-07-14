@@ -12,6 +12,9 @@ function ExchangeWidget({ diamonds, coins, userId, onSuccess, addToast }) {
 
   const maxExchange = Math.floor(diamonds / 10) * 10
   const coinsToGet = (amount / 10) * 30
+  const [skills, setSkills] = useState([])
+  const [editingSkills, setEditingSkills] = useState(false)
+  const [skillsForm, setSkillsForm] = useState([])
 
   const handleExchange = async () => {
     setLoading(true)
@@ -107,6 +110,10 @@ export default function Profile() {
             setDiamonds(data.diamonds || 0)
           })
 
+        fetch(`/api/profile?userId=${u.id}`)
+          .then(res => res.json())
+          .then(data => setSkills(data.skills || []))
+        
         fetch(`/api/activity?userId=${u.id}`)
           .then(res => res.json())
           .then(data => {
@@ -128,6 +135,42 @@ export default function Profile() {
     setUser(updated)
     localStorage.setItem('user', JSON.stringify(updated))
     setEditing(false)
+  }
+
+const openSkillsEdit = () => {
+    setSkillsForm(skills.length > 0 ? [...skills] : [{ name: '', level: 1 }])
+    setEditingSkills(true)
+  }
+
+  const addSkill = () => {
+    setSkillsForm([...skillsForm, { name: '', level: 1 }])
+  }
+
+  const removeSkill = (i) => {
+    setSkillsForm(skillsForm.filter((_, idx) => idx !== i))
+  }
+
+  const updateSkill = (i, field, value) => {
+    const updated = [...skillsForm]
+    updated[i] = { ...updated[i], [field]: value }
+    setSkillsForm(updated)
+  }
+
+  const saveSkills = async () => {
+    const cleaned = skillsForm.filter(s => s.name.trim() !== '')
+    try {
+      await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, skills: cleaned })
+      })
+      setSkills(cleaned)
+      const updated = { ...user, skills: cleaned }
+      localStorage.setItem('user', JSON.stringify(updated))
+    } catch (err) {
+      console.error(err)
+    }
+    setEditingSkills(false)
   }
 
   const addSocialLink = () => {
@@ -324,19 +367,76 @@ export default function Profile() {
           </div>
 
           {/* Skills */}
+          {/* Skills */}
           <div style={{ ...card, padding: '16px 20px' }}>
-            <h4 style={{ color: '#8b949e', fontWeight: '600', margin: '0 0 14px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>দক্ষতা</h4>
-            {skills.map((skill, i) => (
-              <div key={i} style={{ marginBottom: i < skills.length - 1 ? '12px' : 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                  <span style={{ color: '#c9d1d9', fontSize: '13px', fontWeight: '600' }}>{skill.name}</span>
-                  <span style={{ color: '#484f58', fontSize: '11px' }}>{['Beginner', 'Intermediate', 'Advanced'][skill.level]}</span>
-                </div>
-                <div style={{ background: '#21262d', borderRadius: '4px', height: '5px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', background: 'linear-gradient(90deg, #3fb950, #2ea043)', borderRadius: '4px', width: `${[25, 55, 90][skill.level]}%` }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <h4 style={{ color: '#8b949e', fontWeight: '600', margin: 0, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>দক্ষতা</h4>
+              {!editingSkills && (
+                <button onClick={openSkillsEdit}
+                  style={{ background: 'transparent', border: '1px solid #30363d', color: '#8b949e', padding: '3px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600' }}>
+                  ✏️ এডিট
+                </button>
+              )}
+            </div>
+
+            {editingSkills ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {skillsForm.map((skill, i) => (
+                  <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      value={skill.name}
+                      onChange={e => updateSkill(i, 'name', e.target.value)}
+                      placeholder="যেমন: Python"
+                      style={{ flex: 1, background: '#0d1117', border: '1px solid #30363d', color: '#e6edf3', padding: '7px 10px', borderRadius: '6px', fontSize: '12px', outline: 'none' }}
+                    />
+                    <select
+                      value={skill.level}
+                      onChange={e => updateSkill(i, 'level', parseInt(e.target.value))}
+                      style={{ background: '#0d1117', border: '1px solid #30363d', color: '#e6edf3', padding: '7px', borderRadius: '6px', fontSize: '12px', outline: 'none' }}>
+                      <option value={0}>Beginner</option>
+                      <option value={1}>Intermediate</option>
+                      <option value={2}>Advanced</option>
+                    </select>
+                    <button onClick={() => removeSkill(i)}
+                      style={{ background: 'none', border: 'none', color: '#f78166', cursor: 'pointer', fontSize: '14px', padding: '0 4px' }}>✕</button>
+                  </div>
+                ))}
+                <button onClick={addSkill}
+                  style={{ background: 'transparent', border: '1px dashed #30363d', color: '#8b949e', padding: '6px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', width: '100%' }}>
+                  + নতুন skill
+                </button>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                  <button onClick={saveSkills}
+                    style={{ flex: 1, background: '#238636', border: 'none', color: 'white', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: '700', fontSize: '13px' }}>
+                    সংরক্ষণ
+                  </button>
+                  <button onClick={() => setEditingSkills(false)}
+                    style={{ flex: 1, background: '#21262d', border: '1px solid #30363d', color: '#8b949e', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+                    বাতিল
+                  </button>
                 </div>
               </div>
-            ))}
+            ) : skills.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                <p style={{ color: '#484f58', fontSize: '12px', margin: '0 0 10px' }}>এখনো কোনো skill যোগ করেননি</p>
+                <button onClick={openSkillsEdit}
+                  style={{ background: '#238636', border: 'none', color: 'white', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
+                  + Skill যোগ করুন
+                </button>
+              </div>
+            ) : (
+              skills.map((skill, i) => (
+                <div key={i} style={{ marginBottom: i < skills.length - 1 ? '12px' : 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                    <span style={{ color: '#c9d1d9', fontSize: '13px', fontWeight: '600' }}>{skill.name}</span>
+                    <span style={{ color: '#484f58', fontSize: '11px' }}>{['Beginner', 'Intermediate', 'Advanced'][skill.level] || 'Beginner'}</span>
+                  </div>
+                  <div style={{ background: '#21262d', borderRadius: '4px', height: '5px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', background: 'linear-gradient(90deg, #3fb950, #2ea043)', borderRadius: '4px', width: `${[25, 55, 90][skill.level] || 25}%` }} />
+                  </div>
+                </div>
+              ))
+            )}
           </div>
 
           {/* Logout */}
