@@ -175,27 +175,29 @@ export default function CourseDetail({ params }) {
       setCompletedLessons([...completedLessons, activeLesson])
       saveProgress(activeLesson)
       addToast(`✅ Lesson "${lesson.title}" সম্পন্ন!`, 'success')
-    }
 
-    if (passed && activeLesson === lessons.length - 1) {
+      // Badge check
       const savedUser = localStorage.getItem('user')
-      if (savedUser && course) {
+      if (savedUser) {
         const u = JSON.parse(savedUser)
-        if ((course.coin_reward || 0) > 0) {
-          fetch('/api/coins', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: u.id, amount: course.coin_reward, type: 'course_complete', description: `course_${id}_completed` })
+        fetch(`/api/badges?userId=${u.id}`)
+          .then(r => r.json())
+          .then(data => {
+            // নতুন badge পেলে toast দেখাও
+            const newBadges = (data.badges || []).filter(b => b.earned)
+            const prevCount = completedLessons.length === 0 ? 0 : undefined
+            if (prevCount === 0 && newBadges.some(b => b.id === 'first_code')) {
+              addToast('🔥 নতুন Badge অর্জন: First Code!', 'success', 5000)
+            }
           })
-          addToast(`🎓 কোর্স সম্পন্ন! +${course.coin_reward} 🪙 কয়েন পেয়েছেন!`, 'coin', 5000)
-        }
-        if ((course.diamond_reward || 0) > 0) {
-          fetch('/api/coins', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: u.id, amount: course.diamond_reward, type: 'mission_complete', description: `course_${id}_diamond` })
-          })
-          addToast(`💎 +${course.diamond_reward} ডায়মন্ড পেয়েছেন!`, 'diamond', 5000)
+      }
+
+      if (score === 100) {
+        addToast('🎯 Perfect Score! Badge অর্জন করেছেন!', 'success', 5000)
+        const savedUser2 = localStorage.getItem('user')
+        if (savedUser2) {
+          const u = JSON.parse(savedUser2)
+          fetch(`/api/badges?userId=${u.id}`)
         }
       }
     }

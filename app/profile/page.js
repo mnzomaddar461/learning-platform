@@ -5,16 +5,11 @@ import { useToast } from '../components/Toast'
 
 // ─── Exchange Widget ───────────────────────────────────────
 function ExchangeWidget({ diamonds, coins, userId, onSuccess, addToast }) {
-  // const { addToast } = useToast()
   const [amount, setAmount] = useState(10)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
-
   const maxExchange = Math.floor(diamonds / 10) * 10
   const coinsToGet = (amount / 10) * 30
-  const [skills, setSkills] = useState([])
-  const [editingSkills, setEditingSkills] = useState(false)
-  const [skillsForm, setSkillsForm] = useState([])
 
   const handleExchange = async () => {
     setLoading(true)
@@ -93,6 +88,11 @@ export default function Profile() {
   const [activityData, setActivityData] = useState({})
   const [coins, setCoins] = useState(0)
   const [diamonds, setDiamonds] = useState(0)
+  const [skills, setSkills] = useState([])
+  const [editingSkills, setEditingSkills] = useState(false)
+  const [skillsForm, setSkillsForm] = useState([])
+  const [badges, setBadges] = useState([])
+  const [badgeCount, setBadgeCount] = useState(0)
 
   useEffect(() => {
     const saved = localStorage.getItem('user')
@@ -110,10 +110,17 @@ export default function Profile() {
             setDiamonds(data.diamonds || 0)
           })
 
+        fetch(`/api/badges?userId=${u.id}`)
+          .then(res => res.json())
+          .then(data => {
+            setBadges(data.badges || [])
+            setBadgeCount(data.earnedCount || 0)
+          })
+
         fetch(`/api/profile?userId=${u.id}`)
           .then(res => res.json())
           .then(data => setSkills(data.skills || []))
-        
+
         fetch(`/api/activity?userId=${u.id}`)
           .then(res => res.json())
           .then(data => {
@@ -137,7 +144,7 @@ export default function Profile() {
     setEditing(false)
   }
 
-const openSkillsEdit = () => {
+  const openSkillsEdit = () => {
     setSkillsForm(skills.length > 0 ? [...skills] : [{ name: '', level: 1 }])
     setEditingSkills(true)
   }
@@ -230,22 +237,6 @@ const openSkillsEdit = () => {
 
   const initials = user.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 
-  const badges = [
-    { icon: '🔥', title: 'First Code', earned: true, stars: 3 },
-    { icon: '⚡', title: 'Speed Coder', earned: false, stars: 0 },
-    { icon: '🎯', title: 'Perfect Score', earned: false, stars: 0 },
-    { icon: '🏆', title: 'Mission Hero', earned: false, stars: 0 },
-    { icon: '📚', title: 'Course Master', earned: false, stars: 0 },
-    { icon: '🌟', title: 'Top 10', earned: false, stars: 0 },
-  ]
-
-  const skills = [
-    { name: 'C', level: 2 },
-    { name: 'C++', level: 1 },
-    { name: 'Python', level: 0 },
-    { name: 'Algorithms', level: 1 },
-  ]
-
   const card = { background: '#161b22', border: '1px solid #30363d', borderRadius: '12px' }
   const hasLinks = Boolean(user.website) || (user.socialLinks && user.socialLinks.length > 0)
 
@@ -332,7 +323,7 @@ const openSkillsEdit = () => {
               { label: '🪙 কয়েন', value: coins, color: '#f0c000' },
               { label: '💎 ডায়মন্ড', value: diamonds, color: '#22d3ee' },
               { label: 'মোট পয়েন্ট', value: user.points || 0, color: '#a371f7' },
-              { label: 'কোর্স সম্পন্ন', value: 0, color: '#3fb950' },
+              { label: '🏅 ব্যাজ', value: badgeCount, color: '#3fb950' },
             ].map((stat, i, arr) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < arr.length - 1 ? '1px solid #21262d' : 'none' }}>
                 <span style={{ color: '#8b949e', fontSize: '13px' }}>{stat.label}</span>
@@ -366,7 +357,6 @@ const openSkillsEdit = () => {
             )}
           </div>
 
-          {/* Skills */}
           {/* Skills */}
           <div style={{ ...card, padding: '16px 20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
@@ -567,21 +557,43 @@ const openSkillsEdit = () => {
               )}
 
               {activeTab === 'badges' && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
-                  {badges.map((badge, i) => (
-                    <div key={i} style={{ background: badge.earned ? '#0d2818' : '#0d1117', border: `1px solid ${badge.earned ? '#2ea04344' : '#21262d'}`, borderRadius: '10px', padding: '20px', textAlign: 'center', opacity: badge.earned ? 1 : 0.5 }}>
-                      <div style={{ fontSize: '36px', marginBottom: '8px' }}>{badge.icon}</div>
-                      <div style={{ color: '#e6edf3', fontWeight: '700', fontSize: '13px', marginBottom: '6px' }}>{badge.title}</div>
-                      <div style={{ display: 'flex', justifyContent: 'center', gap: '2px', marginBottom: '6px' }}>
-                        {[1, 2, 3].map(s => (
-                          <span key={s} style={{ color: s <= badge.stars ? '#f0c000' : '#30363d', fontSize: '14px' }}>★</span>
-                        ))}
+                <div>
+                  {/* Earned count */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                    <h4 style={{ color: '#c9d1d9', fontWeight: '700', fontSize: '14px', margin: 0 }}>
+                      অর্জিত ব্যাজ
+                    </h4>
+                    <span style={{ background: '#0d2818', border: '1px solid #2ea04344', color: '#3fb950', padding: '3px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700' }}>
+                      {badgeCount}/{badges.length} অর্জিত
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px' }}>
+                    {badges.map((badge, i) => (
+                      <div key={i} style={{
+                        background: badge.earned ? '#0d2818' : '#0d1117',
+                        border: `1px solid ${badge.earned ? '#2ea04344' : '#21262d'}`,
+                        borderRadius: '10px',
+                        padding: '20px',
+                        textAlign: 'center',
+                        opacity: badge.earned ? 1 : 0.5,
+                        transition: 'all 0.2s',
+                        position: 'relative'
+                      }}>
+                        {badge.earned && (
+                          <div style={{ position: 'absolute', top: '8px', right: '8px', background: '#3fb950', borderRadius: '50%', width: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px' }}>
+                            ✓
+                          </div>
+                        )}
+                        <div style={{ fontSize: '36px', marginBottom: '8px' }}>{badge.icon}</div>
+                        <div style={{ color: '#e6edf3', fontWeight: '700', fontSize: '13px', marginBottom: '6px' }}>{badge.title}</div>
+                        <div style={{ color: '#484f58', fontSize: '11px', marginBottom: '8px', lineHeight: '1.4' }}>{badge.desc}</div>
+                        <div style={{ fontSize: '11px', fontWeight: '600', color: badge.earned ? '#3fb950' : '#484f58' }}>
+                          {badge.earned ? '✓ অর্জিত' : '🔒 লক'}
+                        </div>
                       </div>
-                      <div style={{ fontSize: '11px', fontWeight: '600', color: badge.earned ? '#3fb950' : '#484f58' }}>
-                        {badge.earned ? '✓ অর্জিত' : '🔒 লক'}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
 
