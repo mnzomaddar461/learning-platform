@@ -93,6 +93,7 @@ export default function Profile() {
   const [skillsForm, setSkillsForm] = useState([])
   const [badges, setBadges] = useState([])
   const [badgeCount, setBadgeCount] = useState(0)
+  const [certificates, setCertificates] = useState([])
 
   useEffect(() => {
     const saved = localStorage.getItem('user')
@@ -116,6 +117,9 @@ export default function Profile() {
             setBadges(data.badges || [])
             setBadgeCount(data.earnedCount || 0)
           })
+        fetch(`/api/certificates?userId=${u.id}`)
+          .then(res => res.json())
+          .then(data => setCertificates(data.certificates || []))
 
         fetch(`/api/profile?userId=${u.id}`)
           .then(res => res.json())
@@ -598,13 +602,52 @@ export default function Profile() {
               )}
 
               {activeTab === 'certificates' && (
-                <div style={{ background: '#0d1117', borderRadius: '8px', padding: '40px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '48px', marginBottom: '12px' }}>📜</div>
-                  <h3 style={{ color: '#c9d1d9', fontWeight: '700', marginBottom: '8px' }}>কোনো সার্টিফিকেট নেই</h3>
-                  <p style={{ color: '#484f58', fontSize: '13px', marginBottom: '16px' }}>একটি কোর্স সম্পন্ন করলে সার্টিফিকেট পাবেন</p>
-                  <Link href="/courses" style={{ background: '#7c3aed', color: 'white', padding: '10px 24px', borderRadius: '8px', textDecoration: 'none', fontSize: '14px', fontWeight: '700' }}>
-                    কোর্স দেখুন →
-                  </Link>
+                <div>
+                  {certificates.length === 0 ? (
+                    <div style={{ background: '#0d1117', borderRadius: '8px', padding: '40px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '48px', marginBottom: '12px' }}>📜</div>
+                      <h3 style={{ color: '#c9d1d9', fontWeight: '700', marginBottom: '8px' }}>কোনো সার্টিফিকেট নেই</h3>
+                      <p style={{ color: '#484f58', fontSize: '13px', marginBottom: '16px' }}>একটি কোর্স সম্পন্ন করলে সার্টিফিকেট পাবেন</p>
+                      <Link href="/courses" style={{ background: '#7c3aed', color: 'white', padding: '10px 24px', borderRadius: '8px', textDecoration: 'none', fontSize: '14px', fontWeight: '700' }}>
+                        কোর্স দেখুন →
+                      </Link>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <h4 style={{ color: '#c9d1d9', fontWeight: '700', fontSize: '14px', margin: 0 }}>
+                          অর্জিত সার্টিফিকেট ({certificates.length})
+                        </h4>
+                      </div>
+                      {certificates.map((cert, i) => (
+                        <div key={i} style={{ background: '#0d1117', border: '1px solid #2ea04344', borderRadius: '12px', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                          {/* Icon */}
+                          <div style={{ width: '56px', height: '56px', background: `linear-gradient(135deg, #7c3aed, #2ea043)`, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', flexShrink: 0 }}>
+                            {cert.icon}
+                          </div>
+
+                          {/* Info */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ color: '#e6edf3', fontWeight: '700', fontSize: '15px', marginBottom: '4px' }}>{cert.title}</div>
+                            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                              {cert.level && <span style={{ color: '#8b949e', fontSize: '12px' }}>🎯 {cert.level}</span>}
+                              {cert.duration && <span style={{ color: '#8b949e', fontSize: '12px' }}>⏱ {cert.duration}</span>}
+                              <span style={{ color: '#3fb950', fontSize: '12px' }}>
+                                ✅ {new Date(cert.completed_at).toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' })}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* View Certificate */}
+                          <Link
+                            href={`/certificate?course=${encodeURIComponent(cert.title)}&id=${cert.course_id}`}
+                            style={{ background: '#7c3aed', color: 'white', padding: '8px 16px', borderRadius: '8px', textDecoration: 'none', fontSize: '12px', fontWeight: '700', flexShrink: 0 }}>
+                            📜 দেখুন
+                          </Link>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

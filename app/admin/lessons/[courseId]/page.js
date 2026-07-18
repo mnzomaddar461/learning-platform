@@ -14,12 +14,11 @@ export default function LessonManager({ params }) {
   const emptyForm = {
     title: '', video_id: '', content: '', duration: '10 মিনিট',
     quiz_type: 'mcq', order_index: 0,
-    quiz_data: [{ question: '', options: ['', '', '', ''], correct: 0 }]
+    quiz_data: [{ question: '', options: ['', '', '', ''], correct: 0, explanation: '' }]
   }
   const [form, setForm] = useState(emptyForm)
 
   useEffect(() => {
-    // course info আনো
     fetch('/api/admin/courses')
       .then(res => res.json())
       .then(data => {
@@ -55,7 +54,7 @@ export default function LessonManager({ params }) {
       quiz_type: lesson.quiz_type || 'mcq',
       order_index: lesson.order_index || 0,
       quiz_data: lesson.quiz_data?.length > 0 ? lesson.quiz_data :
-        [{ question: '', options: ['', '', '', ''], correct: 0 }]
+        (lesson.quiz_type === 'none' ? [] : [{ question: '', options: ['', '', '', ''], correct: 0, explanation: '' }])
     })
     setModalOpen(true)
   }
@@ -66,8 +65,57 @@ export default function LessonManager({ params }) {
     loadLessons()
   }
 
+  const validateQuizData = () => {
+    if (form.quiz_type === 'none') return null
+
+    if (form.quiz_type === 'mcq') {
+      for (let qi = 0; qi < form.quiz_data.length; qi++) {
+        const q = form.quiz_data[qi]
+        if (!q.question || !q.question.trim()) {
+          return `প্রশ্ন ${qi + 1}-এর প্রশ্নের টেক্সট খালি রাখা যাবে না`
+        }
+        const filledOptions = (q.options || []).filter(opt => opt && opt.trim())
+        if (filledOptions.length < 2) {
+          return `প্রশ্ন ${qi + 1}-এ কমপক্ষে ২টি অপশন পূরণ করতে হবে`
+        }
+        if (!q.options[q.correct] || !q.options[q.correct].trim()) {
+          return `প্রশ্ন ${qi + 1}-এর সঠিক উত্তর হিসেবে বাছাই করা অপশনটি খালি — একটি পূরণকৃত অপশনকে সঠিক হিসেবে চিহ্নিত করুন`
+        }
+      }
+    } else if (form.quiz_type === 'dropdown') {
+      for (let di = 0; di < form.quiz_data.length; di++) {
+        const dd = form.quiz_data[di]
+        if (!dd.question || !dd.question.trim()) {
+          return 'Dropdown সমস্যার মূল প্রশ্ন খালি রাখা যাবে না'
+        }
+        const steps = dd.steps || []
+        if (steps.length === 0) {
+          return 'কমপক্ষে একটি ধাপ যোগ করতে হবে'
+        }
+        for (let si = 0; si < steps.length; si++) {
+          const step = steps[si]
+          if (!step.label || !step.label.trim()) {
+            return `ধাপ ${si + 1}-এর লেবেল খালি রাখা যাবে না`
+          }
+          const filledOptions = (step.options || []).filter(opt => opt && opt.trim())
+          if (filledOptions.length < 2) {
+            return `ধাপ ${si + 1}-এ কমপক্ষে ২টি অপশন পূরণ করতে হবে`
+          }
+        }
+      }
+    }
+    return null
+  }
+
   const saveLesson = async () => {
     if (!form.title) { alert('টাইটেল আবশ্যক'); return }
+
+    const quizError = validateQuizData()
+    if (quizError) {
+      alert('⚠️ ' + quizError)
+      return
+    }
+
     setSaving(true)
     try {
       const payload = { ...form, course_id: courseId }
@@ -96,9 +144,8 @@ export default function LessonManager({ params }) {
     }
   }
 
-  // MCQ Quiz Builder helpers
   const addMCQQuestion = () => {
-    setForm({ ...form, quiz_data: [...form.quiz_data, { question: '', options: ['', '', '', ''], correct: 0 }] })
+    setForm({ ...form, quiz_data: [...form.quiz_data, { question: '', options: ['', '', '', ''], correct: 0, explanation: '' }] })
   }
 
   const removeMCQQuestion = (qi) => {
@@ -119,7 +166,6 @@ export default function LessonManager({ params }) {
     setForm({ ...form, quiz_data: updated })
   }
 
-  // Dropdown Quiz Builder helpers
   const addDropdownStep = (di) => {
     const updated = [...form.quiz_data]
     updated[di].steps = [...(updated[di].steps || []), { label: '', options: ['', ''], correct: 0 }]
@@ -154,7 +200,6 @@ export default function LessonManager({ params }) {
     <div style={{ minHeight: '100vh', background: '#0d1117', color: '#e6edf3', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', marginTop: '-64px', paddingTop: '64px' }}>
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '32px' }}>
 
-        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
           <Link href="/admin" style={{ background: '#21262d', border: '1px solid #30363d', color: '#8b949e', padding: '8px 16px', borderRadius: '8px', textDecoration: 'none', fontSize: '13px' }}>
             ← Admin
@@ -171,7 +216,6 @@ export default function LessonManager({ params }) {
           </button>
         </div>
 
-        {/* Lesson List */}
         {lessons.length === 0 ? (
           <div style={{ ...card, padding: '40px', textAlign: 'center', color: '#484f58' }}>
             এখনো কোনো lesson যোগ করা হয়নি। উপরে "+ নতুন Lesson" চাপুন।
@@ -188,10 +232,16 @@ export default function LessonManager({ params }) {
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <span style={{ color: '#8b949e', fontSize: '12px' }}>⏱ {lesson.duration}</span>
                     {lesson.video_id && <span style={{ color: '#8b949e', fontSize: '12px' }}>▶ Video: {lesson.video_id}</span>}
-                    <span style={{ background: lesson.quiz_type === 'mcq' ? '#1f103580' : '#0d281880', color: lesson.quiz_type === 'mcq' ? '#a371f7' : '#3fb950', fontSize: '11px', padding: '1px 8px', borderRadius: '6px' }}>
-                      {lesson.quiz_type === 'mcq' ? 'MCQ' : 'Dropdown'}
+                    <span style={{
+                      background: lesson.quiz_type === 'mcq' ? '#1f103580' : lesson.quiz_type === 'dropdown' ? '#0d281880' : '#21262d',
+                      color: lesson.quiz_type === 'mcq' ? '#a371f7' : lesson.quiz_type === 'dropdown' ? '#3fb950' : '#8b949e',
+                      fontSize: '11px', padding: '1px 8px', borderRadius: '6px'
+                    }}>
+                      {lesson.quiz_type === 'mcq' ? 'MCQ' : lesson.quiz_type === 'dropdown' ? 'Dropdown' : 'Quiz নেই'}
                     </span>
-                    <span style={{ color: '#484f58', fontSize: '12px' }}>{(lesson.quiz_data || []).length} প্রশ্ন</span>
+                    {lesson.quiz_type !== 'none' && (
+                      <span style={{ color: '#484f58', fontSize: '12px' }}>{(lesson.quiz_data || []).length} প্রশ্ন</span>
+                    )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -210,7 +260,6 @@ export default function LessonManager({ params }) {
         )}
       </div>
 
-      {/* Lesson Modal */}
       {modalOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 100, overflowY: 'auto', padding: '32px 16px' }}>
           <div style={{ ...card, padding: '24px', width: '600px', minWidth: '320px' }}>
@@ -219,7 +268,6 @@ export default function LessonManager({ params }) {
             </h3>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {/* Basic Info */}
               <div>
                 <label style={labelStyle}>টাইটেল *</label>
                 <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} style={inputStyle} placeholder="যেমন: প্রোগ্রামিং কী?" />
@@ -248,15 +296,17 @@ export default function LessonManager({ params }) {
                   <label style={labelStyle}>Quiz টাইপ</label>
                   <select value={form.quiz_type} onChange={e => {
                     const newType = e.target.value
-                    setForm({
-                      ...form, quiz_type: newType,
-                      quiz_data: newType === 'mcq'
-                        ? [{ question: '', options: ['', '', '', ''], correct: 0 }]
-                        : [{ question: '', steps: [{ label: '', options: ['', ''], correct: 0 }] }]
-                    })
+                    let newQuizData = []
+                    if (newType === 'mcq') {
+                      newQuizData = [{ question: '', options: ['', '', '', ''], correct: 0, explanation: '' }]
+                    } else if (newType === 'dropdown') {
+                      newQuizData = [{ question: '', steps: [{ label: '', options: ['', ''], correct: 0 }] }]
+                    }
+                    setForm({ ...form, quiz_type: newType, quiz_data: newQuizData })
                   }} style={inputStyle}>
                     <option value="mcq">MCQ Quiz</option>
                     <option value="dropdown">Dropdown Problem</option>
+                    <option value="none">কোনো Quiz নেই</option>
                   </select>
                 </div>
                 <div>
@@ -265,7 +315,14 @@ export default function LessonManager({ params }) {
                 </div>
               </div>
 
-              {/* MCQ Builder */}
+              {form.quiz_type === 'none' && (
+                <div style={{ background: '#0d1117', border: '1px dashed #30363d', borderRadius: '10px', padding: '20px', textAlign: 'center' }}>
+                  <p style={{ color: '#484f58', fontSize: '13px', margin: 0 }}>
+                    📝 এই lesson-এ কোনো Quiz থাকবে না। ইউজার শুধু ভিডিও/নোটস দেখে পরের lesson-এ যেতে পারবে।
+                  </p>
+                </div>
+              )}
+
               {form.quiz_type === 'mcq' && (
                 <div style={{ background: '#0d1117', borderRadius: '10px', padding: '16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
@@ -289,6 +346,28 @@ export default function LessonManager({ params }) {
                       </div>
                       <input value={q.question} onChange={e => updateMCQQuestion(qi, 'question', e.target.value)}
                         style={{ ...inputStyle, marginBottom: '10px' }} placeholder="প্রশ্ন লিখুন..." />
+
+                      {/* Code Block */}
+                      <div style={{ marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <label style={{ ...labelStyle, margin: 0 }}>💻 Code Block (ঐচ্ছিক)</label>
+                          <button
+                            onClick={() => updateMCQQuestion(qi, 'code', q.code ? '' : '// code এখানে লিখুন')}
+                            style={{ background: q.code ? '#2a0a00' : '#0d2818', border: `1px solid ${q.code ? '#f7816644' : '#3fb95044'}`, color: q.code ? '#f78166' : '#3fb950', padding: '3px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px' }}>
+                            {q.code ? '✕ সরান' : '+ যোগ করুন'}
+                          </button>
+                        </div>
+                        {q.code !== undefined && q.code !== '' && (
+                          <textarea
+                            value={q.code}
+                            onChange={e => updateMCQQuestion(qi, 'code', e.target.value)}
+                            rows={4}
+                            style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', resize: 'vertical', background: '#0d1117', color: '#58a6ff' }}
+                            placeholder={`#include <stdio.h>\nint main() {\n    printf("Hello");\n    return 0;\n}`}
+                          />
+                        )}
+                      </div>
+
                       {q.options.map((opt, oi) => (
                         <div key={oi} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                           <input type="radio" name={`correct-${qi}`} checked={q.correct === oi}
@@ -299,12 +378,22 @@ export default function LessonManager({ params }) {
                         </div>
                       ))}
                       <p style={{ color: '#484f58', fontSize: '11px', margin: '8px 0 0' }}>✓ চিহ্নিত অপশনটি সঠিক উত্তর</p>
+
+                      {/* Explanation */}
+                      <div style={{ marginTop: '10px' }}>
+                        <label style={{ ...labelStyle, color: '#58a6ff' }}>💡 Explanation (ঐচ্ছিক)</label>
+                        <textarea
+                          value={q.explanation || ''}
+                          onChange={e => updateMCQQuestion(qi, 'explanation', e.target.value)}
+                          rows={2}
+                          style={{ ...inputStyle, resize: 'vertical', fontSize: '12px' }}
+                          placeholder="এই প্রশ্নের সঠিক উত্তরের ব্যাখ্যা লিখুন (code সহ)..." />
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {/* Dropdown Builder */}
               {form.quiz_type === 'dropdown' && (
                 <div style={{ background: '#0d1117', borderRadius: '10px', padding: '16px' }}>
                   <label style={{ ...labelStyle, color: '#58a6ff', marginBottom: '12px' }}>📋 Dropdown সমস্যা</label>

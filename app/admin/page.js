@@ -12,6 +12,8 @@ export default function Admin() {
   const [coinAmount, setCoinAmount] = useState('')
   const [coinType, setCoinType] = useState('coins')
   const [coinMessage, setCoinMessage] = useState('')
+  const [userActionMsg, setUserActionMsg] = useState('')
+  const [actionLoading, setActionLoading] = useState(null)
 
   // Courses
   const [courses, setCourses] = useState([])
@@ -174,6 +176,45 @@ const openNewCourseModal = () => {
     if (!confirm(`"${course.title}" ডিলিট করতে চান?`)) return
     await fetch(`/api/admin/courses?id=${course.id}`, { method: 'DELETE' })
     loadCourses()
+  }
+
+  const manageUser = async (action, userId, userName) => {
+    const confirmMsg = {
+      ban: `"${userName}" কে ban করতে চান?`,
+      unban: `"${userName}" কে unban করতে চান?`,
+      reset: `"${userName}" এর সব data (points/coins/progress) reset করতে চান? এটা undo করা যাবে না।`,
+    }
+    if (!confirm(confirmMsg[action])) return
+
+    let reason = ''
+    if (action === 'ban') {
+      reason = prompt('Ban-এর কারণ লিখুন (optional):') || 'Admin কর্তৃক ban'
+    }
+
+    setActionLoading(userId)
+    setUserActionMsg('')
+
+    try {
+      const res = await fetch('/api/admin/manage-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, userId, reason })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setUserActionMsg(`❌ ${data.error}`)
+      } else {
+        setUserActionMsg(`✅ ${data.message}`)
+        // Users list refresh করো
+        fetch('/api/admin/users')
+          .then(r => r.json())
+          .then(d => setUsers(d.users || []))
+      }
+    } catch {
+      setUserActionMsg('❌ নেটওয়ার্ক সমস্যা')
+    } finally {
+      setActionLoading(null)
+    }
   }
 
   // ---------- Mission handlers ----------
@@ -397,25 +438,34 @@ const openNewCourseModal = () => {
         )}
 
         {/* Users Tab */}
+        {/* Users Tab */}
         {activeTab === 'users' && (
           <div>
             <h1 style={{ color: '#e6edf3', fontWeight: '800', fontSize: '24px', margin: '0 0 4px' }}>ইউজার ম্যানেজমেন্ট</h1>
             <p style={{ color: '#8b949e', fontSize: '14px', margin: '0 0 24px' }}>মোট {users.length} জন ইউজার</p>
+
+            {userActionMsg && (
+              <div style={{ background: userActionMsg.startsWith('✅') ? '#0d2818' : '#2a0a00', border: `1px solid ${userActionMsg.startsWith('✅') ? '#2ea04344' : '#f7816644'}`, color: userActionMsg.startsWith('✅') ? '#3fb950' : '#f78166', padding: '12px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                {userActionMsg}
+                <button onClick={() => setUserActionMsg('')} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+              </div>
+            )}
+
             <div style={{ ...card, overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#0d1117', borderBottom: '1px solid #30363d' }}>
-                    {['নাম', 'ইমেইল', 'পয়েন্ট', 'Role', 'যোগদান'].map(h => (
+                    {['নাম', 'ইমেইল', 'পয়েন্ট', 'Role', 'Status', 'Action'].map(h => (
                       <th key={h} style={{ color: '#8b949e', fontSize: '11px', fontWeight: '600', textAlign: 'left', padding: '12px 16px', textTransform: 'uppercase' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {users.map((u, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #21262d' }}>
+                    <tr key={i} style={{ borderBottom: '1px solid #21262d', opacity: u.is_banned ? 0.6 : 1 }}>
                       <td style={{ padding: '14px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ width: '32px', height: '32px', background: 'linear-gradient(135deg, #7c3aed, #2ea043)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '800', color: 'white', flexShrink: 0 }}>
+                          <div style={{ width: '32px', height: '32px', background: u.is_banned ? '#2a0a00' : 'linear-gradient(135deg, #7c3aed, #2ea043)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '800', color: 'white', flexShrink: 0 }}>
                             {u.name?.charAt(0)}
                           </div>
                           <span style={{ color: '#e6edf3', fontSize: '14px', fontWeight: '600' }}>{u.name}</span>
@@ -428,7 +478,41 @@ const openNewCourseModal = () => {
                           {u.role === 'admin' ? '👑 Admin' : '🎓 Student'}
                         </span>
                       </td>
-                      <td style={{ padding: '14px 16px', color: '#484f58', fontSize: '13px' }}>{u.joined}</td>
+                      <td style={{ padding: '14px 16px' }}>
+                        <span style={{ background: u.is_banned ? '#2a0a00' : '#0d2818', color: u.is_banned ? '#f78166' : '#3fb950', padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
+                          {u.is_banned ? '🚫 Banned' : '✅ Active'}
+                        </span>
+                        {u.is_banned && u.ban_reason && (
+                          <div style={{ color: '#484f58', fontSize: '10px', marginTop: '2px' }}>{u.ban_reason}</div>
+                        )}
+                      </td>
+                      <td style={{ padding: '14px 16px' }}>
+                        {u.role !== 'admin' && (
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            {u.is_banned ? (
+                              <button
+                                onClick={() => manageUser('unban', u.id, u.name)}
+                                disabled={actionLoading === u.id}
+                                style={{ background: '#0d2818', border: '1px solid #3fb95044', color: '#3fb950', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600', opacity: actionLoading === u.id ? 0.5 : 1 }}>
+                                ✅ Unban
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => manageUser('ban', u.id, u.name)}
+                                disabled={actionLoading === u.id}
+                                style={{ background: '#2a0a00', border: '1px solid #f7816644', color: '#f78166', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600', opacity: actionLoading === u.id ? 0.5 : 1 }}>
+                                🚫 Ban
+                              </button>
+                            )}
+                            <button
+                              onClick={() => manageUser('reset', u.id, u.name)}
+                              disabled={actionLoading === u.id}
+                              style={{ background: '#1a1000', border: '1px solid #f0c00044', color: '#f0c000', padding: '5px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600', opacity: actionLoading === u.id ? 0.5 : 1 }}>
+                              🔄 Reset
+                            </button>
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

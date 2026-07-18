@@ -12,20 +12,37 @@ export async function POST(request) {
       .eq('course_id', courseId)
       .single()
 
+    // Total lessons count আনো
+    const { data: lessonData } = await supabase
+      .from('lessons')
+      .select('id')
+      .eq('course_id', courseId)
+
+    const totalLessons = lessonData?.length || 0
+    const newProgress = existing ? Math.max(existing.progress, lessonIndex + 1) : lessonIndex + 1
+    const isCompleted = totalLessons > 0 && newProgress >= totalLessons
+
     if (existing) {
-      const newProgress = Math.max(existing.progress, lessonIndex + 1)
       await supabase
         .from('enrollments')
-        .update({ progress: newProgress })
+        .update({
+          progress: newProgress,
+          completed_at: isCompleted && !existing.completed_at ? new Date().toISOString() : existing.completed_at
+        })
         .eq('user_id', userId)
         .eq('course_id', courseId)
     } else {
       await supabase
         .from('enrollments')
-        .insert([{ user_id: userId, course_id: courseId, progress: lessonIndex + 1 }])
+        .insert([{
+          user_id: userId,
+          course_id: courseId,
+          progress: newProgress,
+          completed_at: isCompleted ? new Date().toISOString() : null
+        }])
     }
 
-    return NextResponse.json({ message: 'Progress saved' })
+    return NextResponse.json({ message: 'Progress saved', completed: isCompleted })
   } catch (error) {
     return NextResponse.json({ message: 'Error' }, { status: 500 })
   }

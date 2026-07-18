@@ -19,7 +19,6 @@ export default function CourseDetail({ params }) {
   const [quizResult, setQuizResult] = useState(null)
   const [dragAnswers, setDragAnswers] = useState({})
 
-  // Video controls
   const playerRef = useRef(null)
   const playerContainerRef = useRef(null)
   const [speed, setSpeed] = useState(1)
@@ -56,7 +55,6 @@ export default function CourseDetail({ params }) {
     }
   }, [id])
 
-  // YouTube IFrame API load
   useEffect(() => {
     if (!window.YT) {
       const tag = document.createElement('script')
@@ -65,7 +63,6 @@ export default function CourseDetail({ params }) {
     }
   }, [])
 
-  // Player initialize করো lesson বদলালে
   useEffect(() => {
     if (lessons.length === 0 || activeTab !== 'video') return
     const lesson = lessons[activeLesson]
@@ -176,14 +173,12 @@ export default function CourseDetail({ params }) {
       saveProgress(activeLesson)
       addToast(`✅ Lesson "${lesson.title}" সম্পন্ন!`, 'success')
 
-      // Badge check
       const savedUser = localStorage.getItem('user')
       if (savedUser) {
         const u = JSON.parse(savedUser)
         fetch(`/api/badges?userId=${u.id}`)
           .then(r => r.json())
           .then(data => {
-            // নতুন badge পেলে toast দেখাও
             const newBadges = (data.badges || []).filter(b => b.earned)
             const prevCount = completedLessons.length === 0 ? 0 : undefined
             if (prevCount === 0 && newBadges.some(b => b.id === 'first_code')) {
@@ -251,7 +246,6 @@ export default function CourseDetail({ params }) {
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col">
 
-      {/* End Popup */}
       {showEndPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center"
           style={{ backdropFilter: 'blur(8px)', background: 'rgba(0,0,0,0.75)' }}>
@@ -261,12 +255,14 @@ export default function CourseDetail({ params }) {
             <p className="text-gray-400 mb-6 leading-relaxed">{lesson.title} সম্পর্কে শিখলেন।</p>
             <div className="bg-gray-800 rounded-2xl p-4 mb-8 text-left">
               <h4 className="text-purple-400 font-bold text-sm mb-2 uppercase tracking-wider">
-                {lesson.quiz_type === 'mcq' ? '🧠 MCQ Quiz' : '📋 Dropdown Problem'}
+                {lesson.quiz_type === 'mcq' ? '🧠 MCQ Quiz' : lesson.quiz_type === 'dropdown' ? '📋 Dropdown Problem' : '📝 Quiz নেই'}
               </h4>
               <p className="text-gray-300 text-sm">
                 {lesson.quiz_type === 'mcq'
                   ? `${(lesson.quiz_data || []).length}টি MCQ প্রশ্নের উত্তর দিন। ৭০% পেলে পরের lesson unlock হবে।`
-                  : `Dropdown সমস্যা সমাধান করুন। ৭০% পেলে পরের lesson unlock হবে।`}
+                  : lesson.quiz_type === 'dropdown'
+                  ? `Dropdown সমস্যা সমাধান করুন। ৭০% পেলে পরের lesson unlock হবে।`
+                  : `এই lesson-এ কোনো Quiz নেই, সরাসরি পরের ধাপে যেতে পারবেন।`}
               </p>
             </div>
             <div className="flex gap-3 justify-center">
@@ -276,7 +272,7 @@ export default function CourseDetail({ params }) {
               </button>
               <button onClick={startQuiz}
                 className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-xl font-bold transition">
-                {lesson.quiz_type === 'mcq' ? '🧠 Quiz দিন' : '📋 সমাধান করুন'} →
+                {lesson.quiz_type === 'mcq' ? '🧠 Quiz দিন' : lesson.quiz_type === 'dropdown' ? '📋 সমাধান করুন' : '➡️ পরবর্তী ধাপ'} →
               </button>
             </div>
           </div>
@@ -285,7 +281,6 @@ export default function CourseDetail({ params }) {
 
       <div className="flex flex-1 overflow-hidden">
 
-        {/* Sidebar */}
         <div className="hidden md:flex flex-col w-72 bg-gray-900 border-r border-gray-800 overflow-y-auto flex-shrink-0">
           <div className={`bg-gradient-to-br ${course.color || 'from-purple-600 to-purple-800'} p-5`}>
             <div className="text-3xl mb-2">{course.icon}</div>
@@ -322,8 +317,12 @@ export default function CourseDetail({ params }) {
                     </div>
                     <div className="text-xs text-gray-600 mt-0.5 flex items-center gap-2">
                       <span>▶ {l.duration}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-xs ${l.quiz_type === 'mcq' ? 'bg-purple-900/40 text-purple-400' : 'bg-blue-900/40 text-blue-400'}`}>
-                        {l.quiz_type === 'mcq' ? 'MCQ' : 'Dropdown'}
+                      <span className={`px-1.5 py-0.5 rounded text-xs ${
+                        l.quiz_type === 'mcq' ? 'bg-purple-900/40 text-purple-400' :
+                        l.quiz_type === 'dropdown' ? 'bg-blue-900/40 text-blue-400' :
+                        'bg-gray-800 text-gray-500'
+                      }`}>
+                        {l.quiz_type === 'mcq' ? 'MCQ' : l.quiz_type === 'dropdown' ? 'Dropdown' : 'Quiz নেই'}
                       </span>
                     </div>
                   </div>
@@ -333,16 +332,14 @@ export default function CourseDetail({ params }) {
           </div>
         </div>
 
-        {/* Main Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto px-6 py-8">
 
-            {/* Tabs */}
             <div className="flex gap-1 mb-6 bg-gray-900 border border-gray-800 rounded-xl p-1 w-fit">
               {[
                 { key: 'video', label: '▶ ভিডিও' },
                 { key: 'notes', label: '📝 নোটস' },
-                { key: 'quiz', label: lesson.quiz_type === 'mcq' ? '🧠 Quiz' : '📋 সমস্যা' },
+                { key: 'quiz', label: lesson.quiz_type === 'mcq' ? '🧠 Quiz' : lesson.quiz_type === 'dropdown' ? '📋 সমস্যা' : '➡️ পরবর্তী' },
               ].map(tab => (
                 <button key={tab.key} onClick={() => setActiveTab(tab.key)}
                   className={`px-5 py-2 rounded-lg text-sm font-medium transition ${activeTab === tab.key ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}>
@@ -356,21 +353,17 @@ export default function CourseDetail({ params }) {
               <h1 className="text-2xl font-bold text-white">{lesson.title}</h1>
             </div>
 
-            {/* Video Tab */}
             {activeTab === 'video' && (
               <div>
                 {lesson.video_id ? (
                   <div>
-                    {/* YouTube Player */}
                     <div className="rounded-2xl overflow-hidden bg-black mb-4 aspect-video">
                       <div id="yt-player" className="w-full h-full" />
                     </div>
 
-                    {/* Video Controls */}
                     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mb-4">
                       <div className="flex items-center justify-between flex-wrap gap-3">
 
-                        {/* Prev / Play / Next */}
                         <div className="flex items-center gap-2">
                           <button
                             onClick={goPrev}
@@ -394,7 +387,6 @@ export default function CourseDetail({ params }) {
                           </button>
                         </div>
 
-                        {/* Speed Control */}
                         <div className="flex items-center gap-2">
                           <span className="text-gray-400 text-xs">Speed:</span>
                           <div className="flex gap-1">
@@ -413,7 +405,6 @@ export default function CourseDetail({ params }) {
                           </div>
                         </div>
 
-                        {/* Done Button */}
                         <button onClick={handleVideoEnd}
                           className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
                           ✅ ভিডিও শেষ
@@ -451,7 +442,6 @@ export default function CourseDetail({ params }) {
               </div>
             )}
 
-            {/* Notes Tab */}
             {activeTab === 'notes' && (
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 mb-6">
                 {lesson.content ? (
@@ -472,21 +462,60 @@ export default function CourseDetail({ params }) {
                   <div className="text-gray-500 text-center py-8">এই lesson-এর কোনো নোট নেই</div>
                 )}
                 <button onClick={handleVideoEnd} className="mt-4 bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition">
-                  {lesson.quiz_type === 'mcq' ? '🧠 Quiz দিন' : '📋 সমাধান করুন'} →
+                  {lesson.quiz_type === 'mcq' ? '🧠 Quiz দিন' : lesson.quiz_type === 'dropdown' ? '📋 সমাধান করুন' : '➡️ পরবর্তী ধাপ'} →
                 </button>
               </div>
             )}
 
-            {/* Quiz Tab */}
             {activeTab === 'quiz' && (
               <div>
                 {quizState === 'idle' && (
                   <div className="bg-gray-900 border border-gray-800 rounded-2xl p-10 text-center">
-                    <div className="text-6xl mb-4">{lesson.quiz_type === 'mcq' ? '🧠' : '📋'}</div>
-                    <h2 className="text-white font-bold text-2xl mb-3">{lesson.quiz_type === 'mcq' ? 'MCQ Quiz' : 'Dropdown Problem'}</h2>
-                    <p className="text-gray-400 mb-8">আগে ভিডিও দেখুন, তারপর quiz দিন।</p>
-                    <button onClick={() => setActiveTab('video')} className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-xl transition mr-3">← ভিডিও দেখুন</button>
-                    <button onClick={startQuiz} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-bold transition">শুরু করুন →</button>
+                    {(lesson.quiz_data || []).length === 0 ? (
+                      <div>
+                        <div className="text-6xl mb-4">📝</div>
+                        <h2 className="text-white font-bold text-2xl mb-3">এই lesson-এ কোনো Quiz নেই</h2>
+                        <p className="text-gray-400 mb-8">ভিডিও দেখুন এবং পরের lesson-এ যান।</p>
+                        <div className="flex gap-3 justify-center">
+                          <button onClick={() => setActiveTab('video')}
+                            className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-xl transition">
+                            ← ভিডিও দেখুন
+                          </button>
+                          {activeLesson < lessons.length - 1 && (
+                            <button onClick={() => {
+                              if (!completedLessons.includes(activeLesson)) {
+                                setCompletedLessons([...completedLessons, activeLesson])
+                                saveProgress(activeLesson)
+                              }
+                              goNext()
+                            }}
+                              className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-bold transition">
+                              পরের lesson 🔓 →
+                            </button>
+                          )}
+                          {activeLesson === lessons.length - 1 && (
+                            <Link href={`/certificate?course=${course.title}&id=${id}`}
+                              onClick={() => {
+                                if (!completedLessons.includes(activeLesson)) {
+                                  setCompletedLessons([...completedLessons, activeLesson])
+                                  saveProgress(activeLesson)
+                                }
+                              }}
+                              className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-bold transition">
+                              🎓 Certificate নিন!
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="text-6xl mb-4">{lesson.quiz_type === 'mcq' ? '🧠' : '📋'}</div>
+                        <h2 className="text-white font-bold text-2xl mb-3">{lesson.quiz_type === 'mcq' ? 'MCQ Quiz' : 'Dropdown Problem'}</h2>
+                        <p className="text-gray-400 mb-8">আগে ভিডিও দেখুন, তারপর quiz দিন।</p>
+                        <button onClick={() => setActiveTab('video')} className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-xl transition mr-3">← ভিডিও দেখুন</button>
+                        <button onClick={startQuiz} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-bold transition">শুরু করুন →</button>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -498,7 +527,20 @@ export default function CourseDetail({ params }) {
                     </div>
                     {(lesson.quiz_data || []).map((q, qi) => (
                       <div key={qi} className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-                        <p className="text-white font-semibold text-lg mb-4"><span className="text-purple-400 mr-2">{qi + 1}.</span>{q.question}</p>
+                        <p className="text-white font-semibold text-lg mb-4">
+                          <span className="text-purple-400 mr-2">{qi + 1}.</span>{q.question}
+                        </p>
+
+                        {/* Code Block */}
+                        {q.code && (
+                          <div className="mb-4 bg-gray-950 border border-gray-700 rounded-xl p-4 overflow-x-auto">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-gray-500 text-xs">💻 Code</span>
+                            </div>
+                            <pre className="text-blue-300 text-sm font-mono whitespace-pre-wrap">{q.code}</pre>
+                          </div>
+                        )}
+
                         <div className="space-y-3">
                           {(q.options || []).map((opt, oi) => (
                             <button key={oi} onClick={() => setSelectedAnswers({ ...selectedAnswers, [qi]: oi })}
@@ -549,15 +591,28 @@ export default function CourseDetail({ params }) {
 
                     {lesson.quiz_type === 'mcq' && (
                       <div className="text-left space-y-3 mb-8">
-                        {(lesson.quiz_data || []).map((q, qi) => (
-                          <div key={qi} className={`p-4 rounded-xl border ${selectedAnswers[qi] === q.correct ? 'bg-green-900/20 border-green-700/40' : 'bg-red-900/20 border-red-700/40'}`}>
-                            <p className="text-white font-medium mb-1">{qi + 1}. {q.question}</p>
-                            <p className={`text-sm ${selectedAnswers[qi] === q.correct ? 'text-green-400' : 'text-red-400'}`}>
-                              আপনার: {q.options?.[selectedAnswers[qi]] || '-'}
-                              {selectedAnswers[qi] !== q.correct && <span className="text-green-400 ml-3">✓ সঠিক: {q.options?.[q.correct]}</span>}
-                            </p>
-                          </div>
-                        ))}
+                        {(lesson.quiz_data || []).map((q, qi) => {
+                          const isCorrect = selectedAnswers[qi] === q.correct
+                          return (
+                            <div key={qi} className={`p-4 rounded-xl border ${isCorrect ? 'bg-green-900/20 border-green-700/40' : 'bg-red-900/20 border-red-700/40'}`}>
+                              <p className="text-white font-medium mb-2">{qi + 1}. {q.question}</p>
+                              <p className={`text-sm mb-1 ${isCorrect ? 'text-green-400' : 'text-red-400'}`}>
+                                {isCorrect ? '✓ সঠিক উত্তর দিয়েছেন' : `✗ আপনার উত্তর: ${q.options?.[selectedAnswers[qi]] || '-'}`}
+                              </p>
+                              {!isCorrect && (
+                                <p className="text-green-400 text-sm mb-2">
+                                  ✓ সঠিক উত্তর: {q.options?.[q.correct]}
+                                </p>
+                              )}
+                              {q.explanation && (
+                                <div className="mt-2 bg-blue-900/20 border border-blue-700/30 rounded-lg p-3">
+                                  <p className="text-blue-400 text-xs font-semibold mb-1">💡 ব্যাখ্যা:</p>
+                                  <p className="text-gray-300 text-sm whitespace-pre-wrap">{q.explanation}</p>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
 
