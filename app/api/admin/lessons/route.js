@@ -23,7 +23,7 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const body = await request.json()
-    const { course_id, title, video_id, content, duration, quiz_type, quiz_data, order_index } = body
+    const { course_id, title, video_id, content, duration, quiz_type, quiz_data, order_index, resources, homework } = body
 
     if (!course_id || !title) {
       return NextResponse.json({ error: 'course_id এবং title আবশ্যক' }, { status: 400 })
@@ -31,7 +31,18 @@ export async function POST(request) {
 
     const { data, error } = await supabase
       .from('lessons')
-      .insert({ course_id, title, video_id: video_id || '', content: content || '', duration: duration || '10 মিনিট', quiz_type: quiz_type || 'mcq', quiz_data: quiz_data || [], order_index: order_index || 0 })
+      .insert({
+        course_id,
+        title,
+        video_id: video_id || '',
+        content: content || '',
+        duration: duration || '10 মিনিট',
+        quiz_type: quiz_type || 'mcq',
+        quiz_data: quiz_data || [],
+        order_index: order_index || 0,
+        resources: resources || [],
+        homework: homework || ''
+      })
       .select()
       .single()
 

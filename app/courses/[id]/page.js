@@ -461,6 +461,38 @@ export default function CourseDetail({ params }) {
                 ) : (
                   <div className="text-gray-500 text-center py-8">এই lesson-এর কোনো নোট নেই</div>
                 )}
+            
+                {/* Homework */}
+                {lesson.homework && (
+                  <div className="mt-6 bg-yellow-900/20 border border-yellow-700/30 rounded-xl p-5">
+                    <h3 className="text-yellow-400 font-bold text-sm mb-3 uppercase tracking-wider">📝 Homework</h3>
+                    <p className="text-gray-300 text-sm whitespace-pre-wrap leading-relaxed">{lesson.homework}</p>
+                  </div>
+                )}
+            
+                {/* Resources */}
+                {lesson.resources && lesson.resources.length > 0 && (
+                  <div className="mt-4 bg-gray-800/50 border border-gray-700 rounded-xl p-5">
+                    <h3 className="text-blue-400 font-bold text-sm mb-3 uppercase tracking-wider">📎 Resources</h3>
+                    <div className="space-y-2">
+                      {lesson.resources.map((r, i) => {
+                        const icon = r.type === 'link' ? '🔗' : r.type?.includes('pdf') ? '📄' : r.type?.includes('image') ? '🖼️' : '📎'
+                        return (
+                          <a key={i} href={r.url} target="_blank" rel="noreferrer"
+                            className="flex items-center gap-3 p-3 bg-gray-900 hover:bg-gray-800 border border-gray-700 hover:border-blue-600 rounded-lg transition">
+                            <span className="text-xl">{icon}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-white font-medium text-sm truncate">{r.name}</div>
+                              {r.size && <div className="text-gray-500 text-xs">{(r.size / 1024).toFixed(1)} KB</div>}
+                            </div>
+                            <span className="text-blue-400 text-xs flex-shrink-0">Download →</span>
+                          </a>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+            
                 <button onClick={handleVideoEnd} className="mt-4 bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition">
                   {lesson.quiz_type === 'mcq' ? '🧠 Quiz দিন' : lesson.quiz_type === 'dropdown' ? '📋 সমাধান করুন' : '➡️ পরবর্তী ধাপ'} →
                 </button>

@@ -2,6 +2,113 @@
 import { use, useState, useEffect } from 'react'
 import Link from 'next/link'
 
+function ResourceUploader({ lessonId, resources, onAdd, onRemove, inputStyle, labelStyle }) {
+  const [uploading, setUploading] = useState(false)
+  const [linkForm, setLinkForm] = useState({ name: '', url: '' })
+  const [showLinkForm, setShowLinkForm] = useState(false)
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('lessonId', lessonId)
+
+      const res = await fetch('/api/admin/upload', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (!res.ok) { alert('Upload error: ' + data.error); return }
+      onAdd({ name: data.name, url: data.url, type: data.type, size: data.size })
+    } catch (err) {
+      alert('Upload failed')
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  const addLink = () => {
+    if (!linkForm.name || !linkForm.url) return
+    onAdd({ name: linkForm.name, url: linkForm.url, type: 'link' })
+    setLinkForm({ name: '', url: '' })
+    setShowLinkForm(false)
+  }
+
+  const getIcon = (type) => {
+    if (!type) return '📎'
+    if (type === 'link') return '🔗'
+    if (type.includes('pdf')) return '📄'
+    if (type.includes('image')) return '🖼️'
+    if (type.includes('video')) return '🎬'
+    return '📎'
+  }
+
+  return (
+    <div>
+      {/* Resource List */}
+      {resources.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+          {resources.map((r, i) => (
+            <div key={i} style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: '8px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '18px' }}>{getIcon(r.type)}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: '#e6edf3', fontSize: '13px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+                {r.size && <div style={{ color: '#484f58', fontSize: '11px' }}>{(r.size / 1024).toFixed(1)} KB</div>}
+              </div>
+              <a href={r.url} target="_blank" rel="noreferrer"
+                style={{ color: '#58a6ff', fontSize: '12px', textDecoration: 'none' }}>দেখুন</a>
+              <button onClick={() => onRemove(i)}
+                style={{ background: 'none', border: 'none', color: '#f78166', cursor: 'pointer', fontSize: '14px' }}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Upload buttons */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <label style={{ background: '#0d2818', border: '1px solid #3fb95044', color: '#3fb950', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', opacity: uploading ? 0.5 : 1 }}>
+          {uploading ? '⏳ Upload হচ্ছে...' : '📤 File Upload'}
+          <input type="file" onChange={handleFileUpload} disabled={uploading}
+            accept=".pdf,.doc,.docx,.ppt,.pptx,.zip,.png,.jpg,.jpeg,.mp4"
+            style={{ display: 'none' }} />
+        </label>
+
+        <button onClick={() => setShowLinkForm(!showLinkForm)}
+          style={{ background: '#0a1628', border: '1px solid #58a6ff44', color: '#58a6ff', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+          🔗 Link যোগ
+        </button>
+      </div>
+
+      {/* Link form */}
+      {showLinkForm && (
+        <div style={{ marginTop: '10px', background: '#161b22', border: '1px solid #30363d', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <input
+            value={linkForm.name}
+            onChange={e => setLinkForm({ ...linkForm, name: e.target.value })}
+            placeholder="Resource-এর নাম (যেমন: Chapter 1 Notes)"
+            style={inputStyle} />
+          <input
+            value={linkForm.url}
+            onChange={e => setLinkForm({ ...linkForm, url: e.target.value })}
+            placeholder="URL (যেমন: https://drive.google.com/...)"
+            style={inputStyle} />
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={addLink}
+              style={{ flex: 1, background: '#238636', border: 'none', color: 'white', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
+              যোগ করুন
+            </button>
+            <button onClick={() => setShowLinkForm(false)}
+              style={{ flex: 1, background: '#21262d', border: '1px solid #30363d', color: '#8b949e', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
+              বাতিল
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function LessonManager({ params }) {
   const { courseId } = use(params)
   const [course, setCourse] = useState(null)
@@ -14,7 +121,9 @@ export default function LessonManager({ params }) {
   const emptyForm = {
     title: '', video_id: '', content: '', duration: '10 মিনিট',
     quiz_type: 'mcq', order_index: 0,
-    quiz_data: [{ question: '', options: ['', '', '', ''], correct: 0, explanation: '' }]
+    quiz_data: [{ question: '', options: ['', '', '', ''], correct: 0, explanation: '' }],
+    resources: [],
+    homework: ''
   }
   const [form, setForm] = useState(emptyForm)
 
@@ -53,6 +162,8 @@ export default function LessonManager({ params }) {
       duration: lesson.duration || '10 মিনিট',
       quiz_type: lesson.quiz_type || 'mcq',
       order_index: lesson.order_index || 0,
+      resources: lesson.resources || [],
+      homework: lesson.homework || '',
       quiz_data: lesson.quiz_data?.length > 0 ? lesson.quiz_data :
         (lesson.quiz_type === 'none' ? [] : [{ question: '', options: ['', '', '', ''], correct: 0, explanation: '' }])
     })
@@ -289,6 +400,34 @@ export default function LessonManager({ params }) {
                 <textarea value={form.content} onChange={e => setForm({ ...form, content: e.target.value })}
                   rows={5} style={{ ...inputStyle, resize: 'vertical' }}
                   placeholder="# শিরোনাম&#10;&#10;এখানে lesson-এর নোট লিখুন..." />
+              </div>
+
+              {/* Homework */}
+              <div>
+                <label style={labelStyle}>📝 Homework (ঐচ্ছিক)</label>
+                <textarea
+                  value={form.homework}
+                  onChange={e => setForm({ ...form, homework: e.target.value })}
+                  rows={3}
+                  style={{ ...inputStyle, resize: 'vertical' }}
+                  placeholder="এই lesson-এর homework বা assignment লিখুন..." />
+              </div>
+
+              {/* Resources */}
+              <div style={{ background: '#0d1117', borderRadius: '10px', padding: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <label style={{ ...labelStyle, margin: 0, color: '#58a6ff' }}>📎 Resources</label>
+                </div>
+
+                {/* Upload */}
+                <ResourceUploader
+                  lessonId={editingLesson?.id || 'new'}
+                  resources={form.resources}
+                  onAdd={(resource) => setForm({ ...form, resources: [...form.resources, resource] })}
+                  onRemove={(i) => setForm({ ...form, resources: form.resources.filter((_, idx) => idx !== i) })}
+                  inputStyle={inputStyle}
+                  labelStyle={labelStyle}
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
