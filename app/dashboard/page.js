@@ -1,8 +1,10 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useAuthGuard } from '../lib/useAuthGuard'
 
 export default function Dashboard() {
+  useAuthGuard()
   const [user, setUser] = useState(null)
   const [coins, setCoins] = useState(0)
   const [diamonds, setDiamonds] = useState(0)

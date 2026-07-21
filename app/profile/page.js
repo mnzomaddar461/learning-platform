@@ -2,9 +2,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useToast } from '../components/Toast'
+import { useAuthGuard } from '../lib/useAuthGuard'
 
 // ─── Exchange Widget ───────────────────────────────────────
 function ExchangeWidget({ diamonds, coins, userId, onSuccess, addToast }) {
+  useAuthGuard()
   const [amount, setAmount] = useState(10)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)

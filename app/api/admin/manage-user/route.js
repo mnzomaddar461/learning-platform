@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '../../../lib/supabase'
+import { supabaseAdmin } from '../../../lib/supabaseAdmin'
 
 export async function POST(request) {
   try {
@@ -9,10 +9,8 @@ export async function POST(request) {
     }
 
     switch (action) {
-
-      // ── Ban ──────────────────────────────────────
       case 'ban': {
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
           .from('users')
           .update({ is_banned: true, ban_reason: reason || 'Admin কর্তৃক ban করা হয়েছে' })
           .eq('id', userId)
@@ -20,9 +18,8 @@ export async function POST(request) {
         return NextResponse.json({ success: true, message: 'User ban করা হয়েছে' })
       }
 
-      // ── Unban ────────────────────────────────────
       case 'unban': {
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
           .from('users')
           .update({ is_banned: false, ban_reason: null })
           .eq('id', userId)
@@ -30,37 +27,11 @@ export async function POST(request) {
         return NextResponse.json({ success: true, message: 'User unban করা হয়েছে' })
       }
 
-      // ── Reset ────────────────────────────────────
       case 'reset': {
-        // Points reset
-        await supabase
-          .from('users')
-          .update({ points: 0 })
-          .eq('id', userId)
-
-        // Coins reset
-        await supabase
-          .from('user_coins')
-          .update({ coins: 0, diamonds: 0 })
-          .eq('user_id', userId)
-
-        // Progress reset
-        await supabase
-          .from('enrollments')
-          .delete()
-          .eq('user_id', userId)
-
-        // Coin transactions reset
-        await supabase
-          .from('coin_transactions')
-          .delete()
-          .eq('user_id', userId)
-
-        // Badges reset
-        await supabase
-          .from('users')
-          .update({ badges: [] })
-          .eq('id', userId)
+        await supabaseAdmin.from('users').update({ points: 0 }).eq('id', userId)
+        await supabaseAdmin.from('user_coins').update({ coins: 0, diamonds: 0 }).eq('user_id', userId)
+        await supabaseAdmin.from('enrollments').delete().eq('user_id', userId)
+        await supabaseAdmin.from('coin_transactions').delete().eq('user_id', userId)
 
         return NextResponse.json({ success: true, message: 'Account সম্পূর্ণ reset করা হয়েছে' })
       }

@@ -38,6 +38,14 @@ export async function POST(request) {
       )
     }
 
+    // ── Ban চেক ──────────────────────────────────
+    if (user.is_banned) {
+      return NextResponse.json(
+        { message: `আপনার অ্যাকাউন্ট ব্যান করা হয়েছে। কারণ: ${user.ban_reason || 'উল্লেখ নেই'}` },
+        { status: 403 }
+      )
+    }
+
     // Create token
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },

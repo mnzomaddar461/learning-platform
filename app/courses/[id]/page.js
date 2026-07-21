@@ -3,8 +3,10 @@ import { use, useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import { useToast } from '../../components/Toast'
+import { useAuthGuard } from '../../lib/useAuthGuard'
 
 export default function CourseDetail({ params }) {
+  useAuthGuard()
   const { addToast } = useToast()
   const { id } = use(params)
   const [course, setCourse] = useState(null)

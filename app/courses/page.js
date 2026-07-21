@@ -2,8 +2,10 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useToast } from '../components/Toast'
+import { useAuthGuard } from '../lib/useAuthGuard'
 
 export default function CoursesPage() {
+  useAuthGuard()
   const { addToast } = useToast()
   const [filter, setFilter] = useState('all')
   const [courses, setCourses] = useState([])

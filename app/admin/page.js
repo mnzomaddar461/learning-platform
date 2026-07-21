@@ -438,7 +438,6 @@ const openNewCourseModal = () => {
         )}
 
         {/* Users Tab */}
-        {/* Users Tab */}
         {activeTab === 'users' && (
           <div>
             <h1 style={{ color: '#e6edf3', fontWeight: '800', fontSize: '24px', margin: '0 0 4px' }}>ইউজার ম্যানেজমেন্ট</h1>
