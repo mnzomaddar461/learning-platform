@@ -9,6 +9,7 @@ export default function MissionDetail({ params }) {
   const [loading, setLoading] = useState(true)
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 })
   const [registered, setRegistered] = useState(false)
+  const [checkingRegistration, setCheckingRegistration] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', country_code: '+880' })
@@ -21,6 +22,22 @@ export default function MissionDetail({ params }) {
         setMission(found || null)
         setLoading(false)
       })
+
+    // Logged-in ইউজার আগে থেকেই registered কিনা চেক করো
+    const savedUser = localStorage.getItem('user')
+    if (savedUser) {
+      const u = JSON.parse(savedUser)
+      setFormData(prev => ({ ...prev, name: u.name || '', email: u.email || '' }))
+      fetch(`/api/mission-registrations?email=${encodeURIComponent(u.email)}&missionId=${id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.registered) setRegistered(true)
+          setCheckingRegistration(false)
+        })
+        .catch(() => setCheckingRegistration(false))
+    } else {
+      setCheckingRegistration(false)
+    }
   }, [id])
 
   useEffect(() => {
@@ -40,9 +57,21 @@ export default function MissionDetail({ params }) {
     return () => clearInterval(timer)
   }, [mission])
 
+  const handlePhoneChange = (value) => {
+    // শুধু সংখ্যা রাখো, সর্বোচ্চ ১২ ডিজিট
+    const digitsOnly = value.replace(/[^0-9]/g, '').slice(0, 12)
+    setFormData({ ...formData, phone: digitsOnly })
+  }
+
   const handleSubmit = async () => {
     if (!formData.name || !formData.email) return
     if (submitting) return
+
+    if (formData.phone && (formData.phone.length < 7 || formData.phone.length > 12)) {
+      alert('সঠিক ফোন নম্বর দিন (৭-১২ ডিজিট)')
+      return
+    }
+
     setSubmitting(true)
 
     const savedUser = localStorage.getItem('user')
@@ -69,7 +98,7 @@ export default function MissionDetail({ params }) {
           localStorage.removeItem('user')
           window.location.href = '/login'
         } else {
-          alert('রেজিস্ট্রেশন ব্যর্থ হয়েছে: ' + (data.error || 'অজানা সমস্যা'))
+          alert(data.error || 'রেজিস্ট্রেশন ব্যর্থ হয়েছে')
         }
         setSubmitting(false)
         return
@@ -129,7 +158,7 @@ export default function MissionDetail({ params }) {
     { rank: 5, name: 'Sabbir Khan', score: 760, badge: '⭐', city: 'Khulna' },
   ]
 
-  if (loading) {
+  if (loading || checkingRegistration) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
         <div className="text-white">লোড হচ্ছে...</div>
@@ -192,11 +221,16 @@ export default function MissionDetail({ params }) {
                   </select>
                   <input
                     type="tel"
+                    inputMode="numeric"
                     value={formData.phone}
-                    onChange={e => setFormData({...formData, phone: e.target.value})}
+                    onChange={e => handlePhoneChange(e.target.value)}
                     placeholder="01XXXXXXXXX"
+                    maxLength={12}
                     className="flex-1 bg-gray-800 border border-gray-700 text-white px-4 py-3 rounded-xl outline-none focus:border-orange-500 transition" />
                 </div>
+                {formData.phone && (formData.phone.length < 7 || formData.phone.length > 12) && (
+                  <p className="text-red-400 text-xs mt-1">সঠিক ফোন নম্বর দিন (৭-১২ ডিজিট)</p>
+                )}
               </div>
             </div>
 
