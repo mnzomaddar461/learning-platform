@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '../../../lib/supabase'
+import { supabaseAdmin } from '../../../lib/supabaseAdmin'
 
 export async function POST(request) {
   try {
@@ -8,7 +8,7 @@ export async function POST(request) {
       return NextResponse.json({ valid: false }, { status: 400 })
     }
 
-    const { data: user, error } = await supabase
+    const { data: user, error } = await supabaseAdmin
       .from('users')
       .select('is_banned, ban_reason')
       .eq('id', userId)

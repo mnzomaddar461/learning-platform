@@ -1,6 +1,5 @@
 'use client'
 import { use, useState, useEffect } from 'react'
-import { supabase } from '../../lib/supabase'
 import { useToast } from '../../components/Toast'
 
 export default function MissionDetail({ params }) {
@@ -11,6 +10,7 @@ export default function MissionDetail({ params }) {
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 })
   const [registered, setRegistered] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', country_code: '+880' })
 
   useEffect(() => {
@@ -42,32 +42,46 @@ export default function MissionDetail({ params }) {
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.email) return
+    if (submitting) return
+    setSubmitting(true)
+
+    const savedUser = localStorage.getItem('user')
+    const u = savedUser ? JSON.parse(savedUser) : null
 
     try {
-      const { error } = await supabase
-        .from('mission_registrations')
-        .insert([{
+      const res = await fetch('/api/mission-registrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           name: formData.name,
           email: formData.email,
           phone: formData.phone ? `${formData.country_code}${formData.phone}` : null,
           mission_id: id,
-          mission_name: mission.title
-        }])
+          mission_name: mission.title,
+          userId: u?.id || null
+        })
+      })
+      const data = await res.json()
 
-      if (error) {
-        alert('রেজিস্ট্রেশন ব্যর্থ হয়েছে: ' + error.message)
+      if (!res.ok) {
+        if (res.status === 403) {
+          alert(data.error)
+          localStorage.removeItem('user')
+          window.location.href = '/login'
+        } else {
+          alert('রেজিস্ট্রেশন ব্যর্থ হয়েছে: ' + (data.error || 'অজানা সমস্যা'))
+        }
+        setSubmitting(false)
         return
       }
     } catch (err) {
       console.error('Registration error:', err)
       alert('একটি সমস্যা হয়েছে')
+      setSubmitting(false)
       return
     }
 
-    const savedUser = localStorage.getItem('user')
-    if (savedUser) {
-      const u = JSON.parse(savedUser)
-
+    if (u) {
       if ((mission.coin_reward || 0) > 0) {
         await fetch('/api/coins', {
           method: 'POST',
@@ -104,6 +118,7 @@ export default function MissionDetail({ params }) {
     }
     setShowForm(false)
     setRegistered(true)
+    setSubmitting(false)
   }
 
   const leaderboard = [
@@ -157,7 +172,8 @@ export default function MissionDetail({ params }) {
                   placeholder="আপনার ইমেইল লিখুন"
                   className="w-full bg-gray-800 border border-gray-700 text-white px-4 py-3 rounded-xl outline-none focus:border-orange-500 transition" />
               </div>
-<label className="text-gray-300 text-sm font-medium block mb-2">ফোন নম্বর</label>
+              <div>
+                <label className="text-gray-300 text-sm font-medium block mb-2">ফোন নম্বর</label>
                 <div className="flex gap-2">
                   <select
                     value={formData.country_code}
@@ -181,13 +197,14 @@ export default function MissionDetail({ params }) {
                     placeholder="01XXXXXXXXX"
                     className="flex-1 bg-gray-800 border border-gray-700 text-white px-4 py-3 rounded-xl outline-none focus:border-orange-500 transition" />
                 </div>
+              </div>
             </div>
 
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowForm(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 py-3 rounded-xl transition">বাতিল</button>
-              <button onClick={handleSubmit} disabled={!formData.name || !formData.email}
+              <button onClick={handleSubmit} disabled={!formData.name || !formData.email || submitting}
                 className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3 rounded-xl font-bold transition">
-                রেজিস্ট্রেশন করুন ✓
+                {submitting ? 'অপেক্ষা করুন...' : 'রেজিস্ট্রেশন করুন ✓'}
               </button>
             </div>
           </div>

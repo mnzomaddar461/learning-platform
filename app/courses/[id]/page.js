@@ -28,6 +28,13 @@ export default function CourseDetail({ params }) {
   const [playerReady, setPlayerReady] = useState(false)
 
   useEffect(() => {
+    // ── লগইন চেক (সবার আগে) ──────────────────
+    const savedUser = localStorage.getItem('user')
+    if (!savedUser) {
+      window.location.href = '/login'
+      return
+    }
+
     fetch('/api/courses')
       .then(res => res.json())
       .then(data => {
@@ -42,19 +49,16 @@ export default function CourseDetail({ params }) {
         setLoading(false)
       })
 
-    const savedUser = localStorage.getItem('user')
-    if (savedUser) {
-      const u = JSON.parse(savedUser)
-      fetch(`/api/progress?userId=${u.id}&courseId=${id}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.progress > 0) {
-            const completed = []
-            for (let i = 0; i < data.progress; i++) completed.push(i)
-            setCompletedLessons(completed)
-          }
-        })
-    }
+    const u = JSON.parse(savedUser)
+    fetch(`/api/progress?userId=${u.id}&courseId=${id}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.progress > 0) {
+          const completed = []
+          for (let i = 0; i < data.progress; i++) completed.push(i)
+          setCompletedLessons(completed)
+        }
+      })
   }, [id])
 
   useEffect(() => {

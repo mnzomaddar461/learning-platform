@@ -40,8 +40,8 @@ export default function Login() {
         {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2">
-            <span className="text-3xl">🚀</span>
-            <span className="text-white font-bold text-2xl">CodeQuest BD</span>
+            {/* <span className="text-3xl"></span> */}
+            <span className="text-white font-bold text-2xl">LeapBangladesh</span>
           </Link>
           <p className="text-gray-400 mt-3">আপনার অ্যাকাউন্টে লগইন করুন</p>
         </div>

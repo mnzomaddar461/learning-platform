@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '../../lib/supabase'
+import { isUserBanned } from '../../lib/checkBan'
 
 export async function POST(request) {
   try {
@@ -7,6 +8,11 @@ export async function POST(request) {
 
     if (!userId || !courseId) {
       return NextResponse.json({ error: 'userId এবং courseId আবশ্যক' }, { status: 400 })
+    }
+
+    const banStatus = await isUserBanned(userId)
+    if (banStatus.banned) {
+      return NextResponse.json({ error: `আপনার অ্যাকাউন্ট ব্যান করা হয়েছে: ${banStatus.reason}` }, { status: 403 })
     }
 
     // Course info আনো

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '../../lib/supabase'
+import { isUserBanned } from '../../lib/checkBan'
 
 export async function POST(request) {
   try {
@@ -9,11 +10,15 @@ export async function POST(request) {
       return NextResponse.json({ error: 'userId এবং diamonds আবশ্যক' }, { status: 400 })
     }
 
+    const banStatus = await isUserBanned(userId)
+    if (banStatus.banned) {
+      return NextResponse.json({ error: `আপনার অ্যাকাউন্ট ব্যান করা হয়েছে: ${banStatus.reason}` }, { status: 403 })
+    }
+
     if (diamonds % 10 !== 0) {
       return NextResponse.json({ error: 'Diamond অবশ্যই ১০ এর গুণিতক হতে হবে' }, { status: 400 })
     }
 
-    // Current balance আনো
     const { data: userCoins, error: coinError } = await supabase
       .from('user_coins')
       .select('coins, diamonds')
@@ -24,7 +29,6 @@ export async function POST(request) {
       return NextResponse.json({ error: 'ব্যালেন্স পাওয়া যায়নি' }, { status: 404 })
     }
 
-    // Minimum 50 diamonds চেক
     if (userCoins.diamonds < 50) {
       return NextResponse.json({
         error: `Exchange করতে minimum ৫০ diamond লাগবে। আপনার আছে: ${userCoins.diamonds}`,
@@ -32,7 +36,6 @@ export async function POST(request) {
       }, { status: 400 })
     }
 
-    // পর্যাপ্ত diamond আছে কিনা চেক
     if (userCoins.diamonds < diamonds) {
       return NextResponse.json({
         error: `পর্যাপ্ত diamond নেই। আপনার আছে: ${userCoins.diamonds}`,
@@ -44,7 +47,6 @@ export async function POST(request) {
     const newDiamonds = userCoins.diamonds - diamonds
     const newCoins = userCoins.coins + coinsToAdd
 
-    // Balance আপডেট
     const { error: updateError } = await supabase
       .from('user_coins')
       .update({
@@ -56,7 +58,6 @@ export async function POST(request) {
 
     if (updateError) throw updateError
 
-    // Transaction log
     await supabase.from('coin_transactions').insert([
       {
         user_id: userId,

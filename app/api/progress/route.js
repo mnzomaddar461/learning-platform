@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '../../lib/supabase'
+import { isUserBanned } from '../../lib/checkBan'
 
 export async function POST(request) {
   try {
     const { userId, courseId, lessonIndex } = await request.json()
+
+    const banStatus = await isUserBanned(userId)
+    if (banStatus.banned) {
+      return NextResponse.json({ message: `আপনার অ্যাকাউন্ট ব্যান করা হয়েছে: ${banStatus.reason}` }, { status: 403 })
+    }
 
     const { data: existing } = await supabase
       .from('enrollments')
@@ -12,7 +18,6 @@ export async function POST(request) {
       .eq('course_id', courseId)
       .single()
 
-    // Total lessons count আনো
     const { data: lessonData } = await supabase
       .from('lessons')
       .select('id')
@@ -56,7 +61,6 @@ export async function GET(request) {
 
     if (!userId) return NextResponse.json({ progress: 0, enrollments: [] })
 
-    // Single course progress
     if (courseId) {
       const { data } = await supabase
         .from('enrollments')
@@ -68,7 +72,6 @@ export async function GET(request) {
       return NextResponse.json({ progress: data?.progress || 0 })
     }
 
-    // সব enrolled courses (dashboard-এর জন্য)
     const { data: enrollments } = await supabase
       .from('enrollments')
       .select('course_id, progress, enrolled_at')
@@ -79,20 +82,18 @@ export async function GET(request) {
       return NextResponse.json({ enrollments: [], enrolledCourseIds: [] })
     }
 
-    // Course details আনো
     const courseIds = enrollments.map(e => e.course_id)
     const { data: courses } = await supabase
       .from('courses')
       .select('id, title, icon, color, lessons, level')
       .in('id', courseIds)
 
-    // Lesson counts আনো (progress % বের করতে)
     const { data: lessonCounts } = await supabase
       .from('lessons')
       .select('course_id')
       .in('course_id', courseIds)
 
-        const lessonCountMap = {}
+    const lessonCountMap = {}
     ;(lessonCounts || []).forEach((l) => {
       lessonCountMap[l.course_id] = (lessonCountMap[l.course_id] || 0) + 1
     })

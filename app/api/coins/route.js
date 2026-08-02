@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '../../lib/supabase'
+import { isUserBanned } from '../../lib/checkBan'
 
-// Get user's coin balance
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -27,7 +27,6 @@ export async function GET(request) {
   }
 }
 
-// Add coins (with reason — prevents duplicate awards)
 export async function POST(request) {
   try {
     const { userId, amount, type, description } = await request.json()
@@ -36,7 +35,11 @@ export async function POST(request) {
       return NextResponse.json({ message: 'Missing data' }, { status: 400 })
     }
 
-    // Check if this exact transaction already happened (prevent duplicate rewards)
+    const banStatus = await isUserBanned(userId)
+    if (banStatus.banned) {
+      return NextResponse.json({ message: `আপনার অ্যাকাউন্ট ব্যান করা হয়েছে: ${banStatus.reason}` }, { status: 403 })
+    }
+
     const { data: existing } = await supabase
       .from('coin_transactions')
       .select('id')
@@ -46,7 +49,6 @@ export async function POST(request) {
       .single()
 
     if (existing) {
-      // Already awarded — don't add again
       const { data: current } = await supabase
         .from('user_coins')
         .select('coins, diamonds')
@@ -59,7 +61,6 @@ export async function POST(request) {
       })
     }
 
-    // Get or create user_coins row
     const { data: existingCoins } = await supabase
       .from('user_coins')
       .select('*')
@@ -84,12 +85,10 @@ export async function POST(request) {
         .insert([{ user_id: userId, coins: newCoins, diamonds: newDiamonds }])
     }
 
-    // Log transaction
     await supabase
       .from('coin_transactions')
       .insert([{ user_id: userId, amount, type, description }])
 
-    // Log daily activity (upsert)
     const today = new Date().toISOString().split('T')[0]
     const { data: existingActivity } = await supabase
       .from('activity_log')
