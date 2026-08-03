@@ -14,6 +14,7 @@ export default function Admin() {
   const [coinMessage, setCoinMessage] = useState('')
   const [userActionMsg, setUserActionMsg] = useState('')
   const [actionLoading, setActionLoading] = useState(null)
+  const [expandedMission, setExpandedMission] = useState(null)
 
   // Courses
   const [courses, setCourses] = useState([])
@@ -579,13 +580,14 @@ const openNewCourseModal = () => {
             )}
           </div>
         )}
-        {/* Missions Tab */}
+
+        {/* Missions Tab — নতুন মডার্ন ডিজাইন */}
         {activeTab === 'missions' && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <div>
                 <h1 style={{ color: '#e6edf3', fontWeight: '800', fontSize: '24px', margin: '0 0 4px' }}>মিশন ম্যানেজমেন্ট</h1>
-                <p style={{ color: '#8b949e', fontSize: '14px', margin: 0 }}>মোট {missions.length} টি মিশন</p>
+                <p style={{ color: '#8b949e', fontSize: '14px', margin: 0 }}>মোট {missions.length} টি মিশন · {registrations.length} টি রেজিস্ট্রেশন</p>
               </div>
               <button onClick={openNewMissionModal} style={{ background: '#f78166', border: 'none', color: 'white', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '14px' }}>
                 + নতুন মিশন
@@ -595,73 +597,99 @@ const openNewCourseModal = () => {
             {missions.length === 0 ? (
               <div style={{ ...card, padding: '40px', textAlign: 'center', color: '#484f58' }}>এখনো কোনো মিশন যোগ করা হয়নি</div>
             ) : (
-              missions.map((mission) => {
-                const missionRegs = registrations.filter(r => r.mission_id === mission.id)
-                return (
-                  <div key={mission.id} style={{ ...card, padding: '24px', marginBottom: '16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-                      <div>
-                        <h3 style={{ color: '#e6edf3', fontWeight: '700', margin: '0 0 4px', fontSize: '18px' }}>{mission.title}</h3>
-                        <p style={{ color: '#8b949e', fontSize: '13px', margin: '0 0 8px' }}>{mission.description}</p>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          {mission.coin_reward > 0 && <span style={{ background: '#f0c00020', color: '#f0c000', fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}>🪙 +{mission.coin_reward}</span>}
-                          {mission.diamond_reward > 0 && <span style={{ background: '#22d3ee20', color: '#22d3ee', fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}>💎 +{mission.diamond_reward}</span>}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {missions.map((mission) => {
+                  const missionRegs = registrations.filter(r => r.mission_id === mission.id)
+                  const isExpanded = expandedMission === mission.id
+                  return (
+                    <div key={mission.id} style={{ ...card, overflow: 'hidden' }}>
+                      {/* Mission Header */}
+                      <div style={{ padding: '24px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+                          <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'linear-gradient(135deg, #f78166, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', flexShrink: 0 }}>
+                              🚀
+                            </div>
+                            <div>
+                              <h3 style={{ color: '#e6edf3', fontWeight: '700', margin: '0 0 4px', fontSize: '18px' }}>{mission.title}</h3>
+                              <p style={{ color: '#8b949e', fontSize: '13px', margin: '0 0 8px', maxWidth: '480px' }}>{mission.description}</p>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                {mission.coin_reward > 0 && <span style={{ background: '#f0c00020', color: '#f0c000', fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}>🪙 +{mission.coin_reward}</span>}
+                                {mission.diamond_reward > 0 && <span style={{ background: '#22d3ee20', color: '#22d3ee', fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}>💎 +{mission.diamond_reward}</span>}
+                              </div>
+                            </div>
+                          </div>
+                          <span style={{ background: mission.is_active ? '#0d2818' : '#1a1a2e', color: mission.is_active ? '#3fb950' : '#8b949e', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', flexShrink: 0 }}>
+                            {mission.is_active ? '🟢 Active' : '⚪ Inactive'}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '20px' }}>
+                          {[
+                            { label: 'নিবন্ধিত', value: missionRegs.length.toString(), color: '#58a6ff' },
+                            { label: 'সর্বোচ্চ', value: mission.max_participants?.toString() || '-', color: '#8b949e' },
+                            { label: 'পুরস্কার', value: `৳${mission.prize_amount || 0}`, color: '#f0c000' },
+                            { label: 'শুরু', value: mission.start_date ? new Date(mission.start_date).toLocaleDateString('bn-BD') : '-', color: '#f78166' },
+                          ].map((s, i) => (
+                            <div key={i} style={{ background: '#0d1117', borderRadius: '8px', padding: '14px', textAlign: 'center' }}>
+                              <div style={{ color: s.color, fontWeight: '800', fontSize: '20px' }}>{s.value}</div>
+                              <div style={{ color: '#484f58', fontSize: '12px', marginTop: '4px' }}>{s.label}</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                          <button onClick={() => openEditMissionModal(mission)} style={{ background: '#21262d', border: '1px solid #30363d', color: '#c9d1d9', padding: '8px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>এডিট করুন</button>
+                          <button onClick={() => toggleActiveMission(mission)} style={{ background: mission.is_active ? '#2a0a00' : '#0d2818', border: `1px solid ${mission.is_active ? '#f7816644' : '#3fb95044'}`, color: mission.is_active ? '#f78166' : '#3fb950', padding: '8px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
+                            {mission.is_active ? 'বন্ধ করুন' : 'চালু করুন'}
+                          </button>
+                          <button
+                            onClick={() => setExpandedMission(isExpanded ? null : mission.id)}
+                            style={{ marginLeft: 'auto', background: isExpanded ? '#1f1035' : '#0a1628', border: `1px solid ${isExpanded ? '#a371f744' : '#58a6ff44'}`, color: isExpanded ? '#a371f7' : '#58a6ff', padding: '8px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            👥 {missionRegs.length} জন নিবন্ধিত
+                            <span style={{ transition: 'transform 0.2s', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block' }}>▾</span>
+                          </button>
                         </div>
                       </div>
-                      <span style={{ background: mission.is_active ? '#0d2818' : '#1a1a2e', color: mission.is_active ? '#3fb950' : '#8b949e', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>
-                        {mission.is_active ? '🟢 Active' : '⚪ Inactive'}
-                      </span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '20px' }}>
-                      {[
-                        { label: 'নিবন্ধিত', value: missionRegs.length.toString(), color: '#58a6ff' },
-                        { label: 'সর্বোচ্চ', value: mission.max_participants?.toString() || '-', color: '#8b949e' },
-                        { label: 'পুরস্কার', value: `৳${mission.prize_amount || 0}`, color: '#f0c000' },
-                        { label: 'শুরু', value: mission.start_date ? new Date(mission.start_date).toLocaleDateString('bn-BD') : '-', color: '#f78166' },
-                      ].map((s, i) => (
-                        <div key={i} style={{ background: '#0d1117', borderRadius: '8px', padding: '14px', textAlign: 'center' }}>
-                          <div style={{ color: s.color, fontWeight: '800', fontSize: '20px' }}>{s.value}</div>
-                          <div style={{ color: '#484f58', fontSize: '12px', marginTop: '4px' }}>{s.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      <button onClick={() => openEditMissionModal(mission)} style={{ background: '#21262d', border: '1px solid #30363d', color: '#c9d1d9', padding: '8px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>এডিট করুন</button>
-                      <button onClick={() => toggleActiveMission(mission)} style={{ background: mission.is_active ? '#2a0a00' : '#0d2818', border: `1px solid ${mission.is_active ? '#f7816644' : '#3fb95044'}`, color: mission.is_active ? '#f78166' : '#3fb950', padding: '8px 18px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
-                        {mission.is_active ? 'বন্ধ করুন' : 'চালু করুন'}
-                      </button>
-                    </div>
-                  </div>
-                )
-              })
-            )}
 
-            <div style={{ ...card, padding: '24px' }}>
-              <h3 style={{ color: '#e6edf3', fontWeight: '700', margin: '0 0 16px', fontSize: '15px' }}>নিবন্ধিত ব্যবহারকারী ({registrations.length})</h3>
-              {registrations.length === 0 ? (
-                <p style={{ color: '#484f58', fontSize: '13px', textAlign: 'center', padding: '20px' }}>এখনো কেউ নিবন্ধন করেননি</p>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #21262d' }}>
-                      {['নাম', 'ইমেইল', 'ফোন', 'নিবন্ধনের তারিখ'].map(h => (
-                        <th key={h} style={{ color: '#8b949e', fontSize: '11px', fontWeight: '600', textAlign: 'left', padding: '8px 0' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {registrations.map((r, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid #21262d' }}>
-                        <td style={{ padding: '10px 0', color: '#e6edf3', fontSize: '13px' }}>{r.name}</td>
-                        <td style={{ padding: '10px 0', color: '#8b949e', fontSize: '13px' }}>{r.email}</td>
-                        <td style={{ padding: '10px 0', color: '#8b949e', fontSize: '13px' }}>{r.phone || '-'}</td>
-                        <td style={{ padding: '10px 0', color: '#484f58', fontSize: '12px' }}>{new Date(r.registered_at).toLocaleDateString('bn-BD')}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                      {/* Registration Table (expand/collapse) */}
+                      {isExpanded && (
+                        <div style={{ borderTop: '1px solid #30363d', background: '#0a0d12' }}>
+                          {missionRegs.length === 0 ? (
+                            <div style={{ padding: '32px', textAlign: 'center', color: '#484f58', fontSize: '13px' }}>
+                              এখনো এই মিশনে কেউ নিবন্ধন করেননি
+                            </div>
+                          ) : (
+                            <div style={{ padding: '20px 24px' }}>
+                              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                  <tr style={{ borderBottom: '1px solid #21262d' }}>
+                                    {['#', 'নাম', 'ইমেইল', 'ফোন', 'নিবন্ধনের তারিখ'].map(h => (
+                                      <th key={h} style={{ color: '#8b949e', fontSize: '11px', fontWeight: '600', textAlign: 'left', padding: '10px 8px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{h}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {missionRegs.map((r, i) => (
+                                    <tr key={i} style={{ borderBottom: '1px solid #161b22' }}>
+                                      <td style={{ padding: '10px 8px', color: '#484f58', fontSize: '12px' }}>{i + 1}</td>
+                                      <td style={{ padding: '10px 8px', color: '#e6edf3', fontSize: '13px', fontWeight: '600' }}>{r.name}</td>
+                                      <td style={{ padding: '10px 8px', color: '#8b949e', fontSize: '13px' }}>{r.email}</td>
+                                      <td style={{ padding: '10px 8px', color: '#8b949e', fontSize: '13px' }}>{r.phone || '-'}</td>
+                                      <td style={{ padding: '10px 8px', color: '#484f58', fontSize: '12px' }}>{new Date(r.registered_at).toLocaleDateString('bn-BD', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
 
