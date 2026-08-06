@@ -49,136 +49,200 @@ async function runPython(code, stdin = '') {
 // ─── CodingLesson Component ───────────────────────────────
 function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast }) {
   const cd = lesson.quiz_data?.[0] || {}
-  const { language = 'c', header = '', starter_code = '', code_cards = [], expected_output = '', note = '' } = cd
+  const { language = 'c', header = '', starter_code = '', note = '' } = cd
+  const problems = cd.problems || []
 
-  const [userCode, setUserCode] = useState(starter_code)
+  const [activeProblem, setActiveProblem] = useState(0)
+  const [solvedProblems, setSolvedProblems] = useState(new Set())
+  const [codes, setCodes] = useState(() => {
+    const init = {}
+    problems.forEach((p, i) => { init[i] = p.starter_code || starter_code })
+    return init
+  })
   const [stdin, setStdin] = useState('')
-  const [output, setOutput] = useState('')
+  const [outputs, setOutputs] = useState({})
+  const [errors, setErrors] = useState({})
   const [isRunning, setIsRunning] = useState(false)
-  const [hasError, setHasError] = useState(false)
-  const [passed, setPassed] = useState(false)
-  const [completed, setCompleted] = useState(false)
+  const [lessonPassed, setLessonPassed] = useState(false)
 
-  // ✅ Fix 1: return 0; এর আগে insert করো
+  const prob = problems[activeProblem]
+  const langLabel = { c: 'C', cpp: 'C++', python: 'Python' }
+  const langColor = { c: '#3b82f6', cpp: '#8b5cf6', python: '#f59e0b' }
+  const color = langColor[language] || '#3b82f6'
+
+  const passPercent = problems.length > 0
+    ? Math.round((solvedProblems.size / problems.length) * 100)
+    : 0
+
   const insertCard = (card) => {
-    setUserCode(prev => {
-      if (prev.includes('    return 0;')) {
-        return prev.replace('    return 0;', `    ${card.code}\n    return 0;`)
-      } else if (prev.includes('return 0;')) {
-        return prev.replace('return 0;', `${card.code}\n    return 0;`)
-      }
-      return prev + '\n    ' + card.code
+    setCodes(prev => {
+      const current = prev[activeProblem] || ''
+      const updated = current.includes('    return 0;')
+        ? current.replace('    return 0;', `    ${card.code}\n    return 0;`)
+        : current + '\n    ' + card.code
+      return { ...prev, [activeProblem]: updated }
     })
     addToast(`📎 "${card.label || card.code.slice(0, 20)}" যোগ হয়েছে`, 'info', 2000)
   }
 
-  // ✅ Fix 2: Server-side compiler proxy ব্যবহার করো
   const handleRun = async () => {
+    if (!prob) return
     setIsRunning(true)
-    setOutput('')
-    setHasError(false)
 
     try {
-      const fullCode = (header || '') + userCode
+      const fullCode = (header || '') + (codes[activeProblem] || '')
+      const res = await fetch('/api/compile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: fullCode, language, stdin })
+      })
+      const data = await res.json()
 
-      let result
-
-      if (language === 'python') {
-        // Python: client-side Pyodide
-        if (!pyodideInstance) {
-          if (!window.loadPyodide) {
-            await new Promise((resolve, reject) => {
-              const s = document.createElement('script')
-              s.src = 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js'
-              s.onload = resolve; s.onerror = reject
-              document.head.appendChild(s)
-            })
-          }
-          pyodideInstance = await window.loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/' })
-        }
-        let pyOutput = ''
-        pyodideInstance.setStdout({ batched: t => { pyOutput += t + '\n' } })
-        pyodideInstance.setStderr({ batched: t => { pyOutput += t + '\n' } })
-        try {
-          await pyodideInstance.runPythonAsync(fullCode)
-          result = { stdout: pyOutput.trimEnd(), stderr: '', hasError: false }
-        } catch (err) {
-          result = { stdout: '', stderr: err.message, hasError: true }
-        }
-      } else {
-        // C/C++: server-side proxy দিয়ে compile
-        const res = await fetch('/api/compile', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: fullCode, language, stdin })
-        })
-        const data = await res.json()
-        if (!res.ok) {
-          result = { stdout: '', stderr: data.error || 'Compiler error', hasError: true }
-        } else {
-          result = data
-        }
+      if (!res.ok || data.error) {
+        setErrors(prev => ({ ...prev, [activeProblem]: data.error || 'Compilation failed' }))
+        setOutputs(prev => ({ ...prev, [activeProblem]: '' }))
+        addToast('❌ ' + (data.error || 'Compilation failed'), 'error', 3000)
+        return
       }
 
-      setHasError(result.hasError)
-      setOutput(result.stderr || result.stdout || '(No output)')
+      const stdout = data.stdout || ''
+      const stderr = data.stderr || ''
+      const hasError = !!stderr && !stdout
 
-      if (!result.hasError && result.stdout) {
+      setErrors(prev => ({ ...prev, [activeProblem]: hasError ? stderr : '' }))
+      setOutputs(prev => ({ ...prev, [activeProblem]: hasError ? stderr : stdout }))
+
+      if (!hasError && stdout) {
         const clean = s => s.trim().replace(/\r\n/g, '\n')
-        const isMatch = expected_output
-          ? clean(result.stdout) === clean(expected_output)
-          : true
+        const expected = prob.expected_output || ''
+        const isMatch = expected ? clean(stdout) === clean(expected) : true
 
-        if (isMatch && !passed) {
-          setPassed(true)
-          setCompleted(true)
-          onComplete()
-          addToast('🎉 সঠিক Output! Lesson সম্পন্ন!', 'success', 4000)
-        } else if (expected_output && !isMatch) {
-          addToast('❌ Output মিলেনি। Expected: ' + expected_output.trim(), 'error', 3000)
+        if (isMatch && !solvedProblems.has(activeProblem)) {
+          const newSolved = new Set(solvedProblems)
+          newSolved.add(activeProblem)
+          setSolvedProblems(newSolved)
+
+          const newPercent = Math.round((newSolved.size / problems.length) * 100)
+          addToast(`✅ Problem ${activeProblem + 1} সমাধান হয়েছে! (${newSolved.size}/${problems.length})`, 'success', 3000)
+
+          if (newPercent >= 70 && !lessonPassed) {
+            setLessonPassed(true)
+            onComplete()
+            addToast(`🎉 ${newPercent}% সম্পন্ন! Lesson unlock হয়েছে!`, 'success', 5000)
+          }
+        } else if (expected && !isMatch) {
+          addToast('❌ Output মিলেনি। আবার চেষ্টা করুন।', 'error', 3000)
         }
       }
     } catch (err) {
-      setHasError(true)
-      setOutput('❌ Error: ' + err.message)
+      setErrors(prev => ({ ...prev, [activeProblem]: err.message }))
+      addToast('❌ Error: ' + err.message, 'error', 3000)
     } finally {
       setIsRunning(false)
     }
   }
 
-  const langLabel = { c: 'C', cpp: 'C++', python: 'Python' }
-  const langColor = { c: '#3b82f6', cpp: '#8b5cf6', python: '#f59e0b' }
-  const color = langColor[language] || '#3b82f6'
+  if (problems.length === 0) {
+    return (
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-10 text-center">
+        <div className="text-4xl mb-3">📭</div>
+        <p className="text-gray-400">এই lesson-এ কোনো problem নেই।</p>
+      </div>
+    )
+  }
+
+  const currentOutput = outputs[activeProblem] || ''
+  const currentError = errors[activeProblem] || ''
+  const hasError = !!currentError
+  const isSolved = solvedProblems.has(activeProblem)
 
   return (
     <div className="space-y-4">
+
+      {/* Progress Bar */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-gray-400 text-sm">Progress: {solvedProblems.size}/{problems.length} solved</span>
+          <span className={`text-sm font-bold ${passPercent >= 70 ? 'text-green-400' : 'text-gray-400'}`}>
+            {passPercent}% {passPercent >= 70 && '✅'}
+          </span>
+        </div>
+        <div className="bg-gray-800 rounded-full h-2 overflow-hidden">
+          <div className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${passPercent}%`, background: passPercent >= 70 ? '#22c55e' : color }} />
+        </div>
+        <p className="text-gray-500 text-xs mt-2">৭০% solve করলে lesson সম্পন্ন হবে</p>
+      </div>
+
+      {/* Problem Tabs */}
+      <div className="flex gap-2 flex-wrap">
+        {problems.map((p, i) => (
+          <button key={i} onClick={() => setActiveProblem(i)}
+            style={{
+              border: `2px solid ${activeProblem === i ? color : solvedProblems.has(i) ? '#22c55e' : '#374151'}`,
+              background: activeProblem === i ? color + '20' : solvedProblems.has(i) ? '#14532d' : '#1f2937',
+              color: activeProblem === i ? color : solvedProblems.has(i) ? '#22c55e' : '#9ca3af'
+            }}
+            className="px-4 py-2 rounded-lg text-sm font-semibold transition-all">
+            {solvedProblems.has(i) ? '✓ ' : ''}{p.title || `Problem ${i + 1}`}
+          </button>
+        ))}
+      </div>
+
+      {/* Problem Description Box */}
+      {prob && (
+        <div style={{ border: `2px solid ${color}50`, background: color + '08' }} className="rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">🧩</span>
+            <h3 style={{ color }} className="font-bold text-base">{prob.title || `Problem ${activeProblem + 1}`}</h3>
+            {isSolved && <span className="text-green-400 text-sm font-bold ml-auto">✅ Solved!</span>}
+          </div>
+
+          <p className="text-gray-300 text-sm leading-relaxed mb-4 whitespace-pre-wrap">{prob.description}</p>
+
+          {(prob.sample_input || prob.sample_output) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {prob.sample_input && (
+                <div className="bg-gray-900 rounded-lg p-3">
+                  <p className="text-gray-500 text-xs font-semibold mb-2 uppercase">📥 Sample Input:</p>
+                  <pre className="text-blue-300 text-sm font-mono">{prob.sample_input}</pre>
+                </div>
+              )}
+              {prob.sample_output && (
+                <div className="bg-gray-900 rounded-lg p-3">
+                  <p className="text-gray-500 text-xs font-semibold mb-2 uppercase">📤 Sample Output:</p>
+                  <pre className="text-green-300 text-sm font-mono">{prob.sample_output}</pre>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-        {/* Left Column */}
+        {/* Left - Editor */}
         <div className="space-y-4">
 
           {/* Code Cards */}
-          {code_cards.filter(c => c.label || c.code).length > 0 && (
+          {(prob?.code_cards || []).filter(c => c.label || c.code).length > 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
               <p className="text-gray-400 text-xs font-semibold mb-3 uppercase tracking-wider">
-                🃏 Code Cards — click করে editor-এ যোগ করুন
+                🃏 Code Cards
               </p>
               <div className="flex flex-wrap gap-2">
-                {code_cards.filter(c => c.label || c.code).map((card, i) => (
+                {(prob?.code_cards || []).filter(c => c.label || c.code).map((card, i) => (
                   <div key={i} className="relative group">
-                    <button
-                      onClick={() => insertCard(card)}
+                    <button onClick={() => insertCard(card)}
                       style={{ borderColor: color + '60', color }}
                       className="bg-gray-800 border hover:scale-105 active:scale-95 px-3 py-2 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer">
                       {card.label || card.code.slice(0, 20)}
                     </button>
-                    {/* Hover tooltip — code দেখাবে */}
                     {card.code && (
                       <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 min-w-48 max-w-64">
                         <div className="bg-gray-950 border border-gray-600 rounded-lg p-3 shadow-xl">
                           <p className="text-gray-500 text-xs mb-1">💻 Code:</p>
-                          <pre style={{ color }}
-                            className="text-xs font-mono whitespace-pre-wrap">{card.code}</pre>
+                          <pre style={{ color }} className="text-xs font-mono whitespace-pre-wrap">{card.code}</pre>
                         </div>
                       </div>
                     )}
@@ -198,26 +262,26 @@ function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast })
                   <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
                 </div>
                 <span className="text-gray-500 text-xs font-semibold font-mono">
-                  💻 {langLabel[language]} Editor
+                  💻 {langLabel[language]} Editor — Problem {activeProblem + 1}
                 </span>
               </div>
-              <button onClick={() => { setUserCode(starter_code); setOutput(''); setPassed(false) }}
-                className="text-gray-500 hover:text-gray-300 text-xs transition">
+              <button onClick={() => {
+                const reset = prob?.starter_code || starter_code
+                setCodes(prev => ({ ...prev, [activeProblem]: reset }))
+                setOutputs(prev => ({ ...prev, [activeProblem]: '' }))
+                setErrors(prev => ({ ...prev, [activeProblem]: '' }))
+              }} className="text-gray-500 hover:text-gray-300 text-xs transition">
                 🔄 Reset
               </button>
             </div>
-
-            {/* Header (read-only) */}
             {header && (
               <div className="px-4 pt-3 pb-1 bg-gray-950 border-b border-gray-800/50 select-none">
                 <pre className="text-blue-400/70 text-xs font-mono leading-relaxed">{header}</pre>
               </div>
             )}
-
-            {/* Editable area */}
             <textarea
-              value={userCode}
-              onChange={e => setUserCode(e.target.value)}
+              value={codes[activeProblem] || ''}
+              onChange={e => setCodes(prev => ({ ...prev, [activeProblem]: e.target.value }))}
               spellCheck={false}
               className="w-full bg-[#080c14] text-gray-200 font-mono text-sm px-4 py-3 outline-none resize-none border-none"
               style={{ minHeight: '220px', lineHeight: '1.6' }}
@@ -234,10 +298,8 @@ function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast })
           )}
         </div>
 
-        {/* Right Column */}
+        {/* Right - Input/Output */}
         <div className="space-y-4">
-
-          {/* Stdin */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
             <p className="text-gray-400 text-xs font-semibold mb-2">📥 Standard Input (stdin)</p>
             <textarea value={stdin} onChange={e => setStdin(e.target.value)} rows={3}
@@ -245,68 +307,58 @@ function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast })
               placeholder="প্রতি লাইনে একটি value..." />
           </div>
 
-          {/* Run Button */}
           <button onClick={handleRun} disabled={isRunning}
-            style={{ background: isRunning ? '#374151' : color }}
+            style={{ background: isRunning ? '#374151' : isSolved ? '#15803d' : color }}
             className="w-full py-3.5 disabled:cursor-not-allowed text-white font-bold rounded-xl transition flex items-center justify-center gap-2 text-sm">
-            {isRunning ? '⏳ Compiling...' : `▶ Run ${langLabel[language]}`}
+            {isRunning ? '⏳ Compiling...' : isSolved ? `✅ Solved — আবার Run করুন` : `▶ Run ${langLabel[language]}`}
           </button>
 
-          {/* Output */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden" style={{ minHeight: '200px' }}>
             <div className="flex items-center justify-between px-4 py-2 bg-gray-800/50 border-b border-gray-700">
               <span className="text-gray-400 text-xs font-semibold uppercase tracking-wider">📤 Output</span>
-              {output && (
-                <span className={`text-xs font-bold px-2 py-0.5 rounded ${hasError ? 'bg-red-900/30 text-red-400' : passed ? 'bg-green-900/30 text-green-400' : 'bg-gray-800 text-gray-400'}`}>
-                  {hasError ? '❌ Error' : passed ? '✅ Passed!' : '▶ Output'}
+              {(currentOutput || currentError) && (
+                <span className={`text-xs font-bold px-2 py-0.5 rounded ${hasError ? 'bg-red-900/30 text-red-400' : isSolved ? 'bg-green-900/30 text-green-400' : 'bg-gray-800 text-gray-400'}`}>
+                  {hasError ? '❌ Error' : isSolved ? '✅ Correct!' : '▶ Output'}
                 </span>
               )}
             </div>
             <div className="p-4" style={{ minHeight: '160px' }}>
-              {output
-                ? <pre className={`text-sm font-mono whitespace-pre-wrap leading-relaxed ${hasError ? 'text-red-400' : 'text-green-300'}`}>{output}</pre>
+              {currentOutput || currentError
+                ? <pre className={`text-sm font-mono whitespace-pre-wrap leading-relaxed ${hasError ? 'text-red-400' : isSolved ? 'text-green-300' : 'text-gray-300'}`}>
+                    {currentError || currentOutput}
+                  </pre>
                 : <p className="text-gray-600 text-sm text-center pt-12">Run করলে output দেখাবে</p>}
             </div>
           </div>
-
-          {/* Expected Output */}
-          {expected_output && (
-            <div className="bg-green-900/10 border border-green-700/20 rounded-xl p-4">
-              <p className="text-green-400 text-xs font-semibold mb-2">✅ Expected Output:</p>
-              <pre className="text-green-300 text-sm font-mono whitespace-pre-wrap">{expected_output}</pre>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* ✅ Fix 3 & 4: Passed banner — Next + Certificate */}
-      {passed && (
+      {/* Lesson Passed Banner */}
+      {lessonPassed && (
         <div className="bg-green-900/20 border border-green-700/40 rounded-xl p-6 text-center">
           <div className="text-4xl mb-3">🎉</div>
-          <p className="text-green-400 font-bold text-lg mb-5">
-            Problem সমাধান হয়েছে! Lesson সম্পন্ন।
+          <p className="text-green-400 font-bold text-lg mb-2">
+            {passPercent}% Problems সমাধান! Lesson সম্পন্ন।
+          </p>
+          <p className="text-gray-400 text-sm mb-5">
+            {solvedProblems.size}/{problems.length} টি problem solve করেছেন।
+            {solvedProblems.size < problems.length && ' বাকিগুলোও চেষ্টা করুন!'}
           </p>
           <div className="flex gap-3 justify-center flex-wrap">
-            <button
-              onClick={() => { setUserCode(starter_code); setOutput(''); setPassed(false) }}
-              className="bg-gray-700 hover:bg-gray-600 text-white px-5 py-2.5 rounded-xl text-sm transition">
-              🔄 আবার করুন
-            </button>
-
-            {/* Next Lesson */}
             {onGoNext && (
               <button onClick={onGoNext}
                 className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition">
                 পরের Lesson 🔓 →
               </button>
             )}
-
-            {/* Certificate — last lesson */}
             {onCertificate && (
               <button onClick={onCertificate}
                 className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition">
                 🎓 Certificate নিন!
               </button>
+            )}
+            {!onGoNext && !onCertificate && (
+              <p className="text-green-300 text-sm">✓ সব lesson সম্পন্ন!</p>
             )}
           </div>
         </div>

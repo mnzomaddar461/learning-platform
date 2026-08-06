@@ -208,6 +208,49 @@ export default function LessonManager({ params }) {
     setForm({ ...form, quiz_data: updated })
   }
 
+
+  const addProblem = () => {
+    const updated = [...form.quiz_data]
+    updated[0] = {
+      ...updated[0],
+      problems: [...(updated[0].problems || []), {
+        id: Date.now().toString(),
+        title: '',
+        description: '',
+        sample_input: '',
+        sample_output: '',
+        expected_output: '',
+        starter_code: updated[0].starter_code || 'int main() {\n    // এখানে লিখুন\n    \n    return 0;\n}',
+        code_cards: []
+      }]
+    }
+    setForm({ ...form, quiz_data: updated })
+  }
+
+  const updateProblem = (pi, field, value) => {
+    const updated = [...form.quiz_data]
+    const problems = [...(updated[0].problems || [])]
+    problems[pi] = { ...problems[pi], [field]: value }
+    updated[0] = { ...updated[0], problems }
+    setForm({ ...form, quiz_data: updated })
+  }
+
+  const removeProblem = (pi) => {
+    const updated = [...form.quiz_data]
+    updated[0].problems = updated[0].problems.filter((_, i) => i !== pi)
+    setForm({ ...form, quiz_data: updated })
+  }
+
+  const updateProblemCard = (pi, ci, field, value) => {
+    const updated = [...form.quiz_data]
+    const problems = [...(updated[0].problems || [])]
+    const cards = [...(problems[pi].code_cards || [])]
+    cards[ci] = { ...cards[ci], [field]: value }
+    problems[pi] = { ...problems[pi], code_cards: cards }
+    updated[0] = { ...updated[0], problems }
+    setForm({ ...form, quiz_data: updated })
+  }
+
   const card = { background: '#161b22', border: '1px solid #30363d', borderRadius: '12px' }
   const inputStyle = { width: '100%', background: '#0d1117', border: '1px solid #30363d', color: '#e6edf3', padding: '10px', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }
   const labelStyle = { color: '#8b949e', fontSize: '12px', fontWeight: '600', display: 'block', marginBottom: '6px' }
@@ -493,54 +536,115 @@ export default function LessonManager({ params }) {
                   </div>
 
                   <div>
-                    <label style={labelStyle}>📦 Header / Imports (read-only)</label>
+                    <label style={labelStyle}>📦 Header (read-only — সব problem-এ একই)</label>
                     <textarea value={cd.header || ''} onChange={e => updateCoding('header', e.target.value)} rows={3}
-                      style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', color: '#58a6ff', resize: 'vertical' }} placeholder="#include <stdio.h>" />
+                      style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', color: '#58a6ff', resize: 'vertical' }}
+                      placeholder="#include <stdio.h>" />
                   </div>
 
                   <div>
-                    <label style={labelStyle}>✏️ Starter Code</label>
-                    <textarea value={cd.starter_code || ''} onChange={e => updateCoding('starter_code', e.target.value)} rows={6}
-                      style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', resize: 'vertical' }} placeholder={'int main() {\n    // এখানে লিখুন\n    return 0;\n}'} />
+                    <label style={labelStyle}>📝 Default Starter Code (প্রতিটা problem-এ ব্যবহার হবে যদি আলাদা না দাও)</label>
+                    <textarea value={cd.starter_code || ''} onChange={e => updateCoding('starter_code', e.target.value)} rows={5}
+                      style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', resize: 'vertical' }}
+                      placeholder={'int main() {\n    // এখানে লিখুন\n    \n    return 0;\n}'} />
                   </div>
 
                   <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <label style={{ ...labelStyle, margin: 0 }}>🃏 Code Cards</label>
-                      <button onClick={() => {
-                        const updated = [...form.quiz_data]
-                        updated[0] = { ...updated[0], code_cards: [...(updated[0].code_cards || []), { id: Date.now().toString(), label: '', code: '' }] }
-                        setForm({ ...form, quiz_data: updated })
-                      }} style={{ background: '#1f1035', border: '1px solid #7c3aed44', color: '#a371f7', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
-                        + Card যোগ
+                    <label style={labelStyle}>📝 Note / Hint (সব problem-এর জন্য)</label>
+                    <textarea value={cd.note || ''} onChange={e => updateCoding('note', e.target.value)} rows={2}
+                      style={{ ...inputStyle, resize: 'vertical' }} placeholder="Hint লিখুন..." />
+                  </div>
+
+                  {/* Problems */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <label style={{ ...labelStyle, margin: 0, color: '#f0c000' }}>🧩 Problems ({(cd.problems || []).length} টি)</label>
+                      <button onClick={addProblem}
+                        style={{ background: '#1a1000', border: '1px solid #f0c00044', color: '#f0c000', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
+                        + Problem যোগ
                       </button>
                     </div>
-                    {(cd.code_cards || []).map((c, ci) => (
-                      <div key={c.id || ci} style={{ background: '#161b22', borderRadius: '8px', padding: '10px', marginBottom: '8px', border: '1px solid #30363d' }}>
-                        <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
-                          <input value={c.label} onChange={e => updateCard(ci, 'label', e.target.value)} style={{ ...inputStyle, flex: 1 }} placeholder="Card label" />
-                          <button onClick={() => {
-                            const updated = [...form.quiz_data]
-                            updated[0].code_cards = updated[0].code_cards.filter((_, idx) => idx !== ci)
-                            setForm({ ...form, quiz_data: updated })
-                          }} style={{ background: '#2a0a00', border: '1px solid #f7816644', color: '#f78166', padding: '0 10px', borderRadius: '6px', cursor: 'pointer' }}>✕</button>
+
+                    {(cd.problems || []).map((prob, pi) => (
+                      <div key={prob.id || pi} style={{ background: '#161b22', borderRadius: '10px', padding: '14px', marginBottom: '12px', border: '1px solid #f0c00030' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                          <span style={{ color: '#f0c000', fontSize: '13px', fontWeight: '700' }}>Problem {pi + 1}</span>
+                          {(cd.problems || []).length > 1 && (
+                            <button onClick={() => removeProblem(pi)}
+                              style={{ background: '#2a0a00', border: '1px solid #f7816644', color: '#f78166', padding: '3px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px' }}>
+                              ✕ সরান
+                            </button>
+                          )}
                         </div>
-                        <textarea value={c.code} onChange={e => updateCard(ci, 'code', e.target.value)} rows={2}
-                          style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', color: '#a371f7', resize: 'vertical' }} placeholder={'printf("Hello World\\n");'} />
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div>
+                            <label style={labelStyle}>Problem Title</label>
+                            <input value={prob.title} onChange={e => updateProblem(pi, 'title', e.target.value)}
+                              style={inputStyle} placeholder="যেমন: Hello World প্রিন্ট করুন" />
+                          </div>
+
+                          <div>
+                            <label style={labelStyle}>Problem Description</label>
+                            <textarea value={prob.description} onChange={e => updateProblem(pi, 'description', e.target.value)} rows={3}
+                              style={{ ...inputStyle, resize: 'vertical' }} placeholder="সমস্যার বিস্তারিত বর্ণনা লিখুন..." />
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                            <div>
+                              <label style={labelStyle}>Sample Input (দেখানোর জন্য)</label>
+                              <textarea value={prob.sample_input} onChange={e => updateProblem(pi, 'sample_input', e.target.value)} rows={2}
+                                style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', resize: 'vertical' }} placeholder="কোনো input না থাকলে খালি রাখুন" />
+                            </div>
+                            <div>
+                              <label style={labelStyle}>Sample Output (দেখানোর জন্য)</label>
+                              <textarea value={prob.sample_output} onChange={e => updateProblem(pi, 'sample_output', e.target.value)} rows={2}
+                                style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', color: '#3fb950', resize: 'vertical' }} placeholder="Hello World" />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label style={labelStyle}>✅ Expected Output (এর সাথে match হলে pass)</label>
+                            <textarea value={prob.expected_output} onChange={e => updateProblem(pi, 'expected_output', e.target.value)} rows={2}
+                              style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', color: '#3fb950', resize: 'vertical' }} placeholder="Hello World" />
+                          </div>
+
+                          <div>
+                            <label style={labelStyle}>✏️ Starter Code (খালি রাখলে default ব্যবহার হবে)</label>
+                            <textarea value={prob.starter_code || ''} onChange={e => updateProblem(pi, 'starter_code', e.target.value)} rows={4}
+                              style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', resize: 'vertical' }}
+                              placeholder="খালি রাখলে উপরের Default Starter Code ব্যবহার হবে" />
+                          </div>
+
+                          {/* Code Cards for this problem */}
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                              <label style={{ ...labelStyle, margin: 0 }}>🃏 Code Cards</label>
+                              <button onClick={() => {
+                                const updated = [...form.quiz_data]
+                                updated[0].problems[pi].code_cards = [...(updated[0].problems[pi].code_cards || []), { id: Date.now().toString(), label: '', code: '' }]
+                                setForm({ ...form, quiz_data: updated })
+                              }} style={{ background: '#1f1035', border: '1px solid #7c3aed44', color: '#a371f7', padding: '3px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px' }}>
+                                + Card যোগ
+                              </button>
+                            </div>
+                            {(prob.code_cards || []).map((c, ci) => (
+                              <div key={c.id || ci} style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
+                                <input value={c.label} onChange={e => updateProblemCard(pi, ci, 'label', e.target.value)}
+                                  style={{ ...inputStyle, width: '40%' }} placeholder="Card label" />
+                                <input value={c.code} onChange={e => updateProblemCard(pi, ci, 'code', e.target.value)}
+                                  style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', color: '#a371f7', flex: 1 }} placeholder='printf("Hello");' />
+                                <button onClick={() => {
+                                  const updated = [...form.quiz_data]
+                                  updated[0].problems[pi].code_cards = updated[0].problems[pi].code_cards.filter((_, idx) => idx !== ci)
+                                  setForm({ ...form, quiz_data: updated })
+                                }} style={{ background: '#2a0a00', border: '1px solid #f7816644', color: '#f78166', padding: '0 8px', borderRadius: '6px', cursor: 'pointer', flexShrink: 0 }}>✕</button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     ))}
-                  </div>
-
-                  <div>
-                    <label style={labelStyle}>✅ Expected Output</label>
-                    <textarea value={cd.expected_output || ''} onChange={e => updateCoding('expected_output', e.target.value)} rows={3}
-                      style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', color: '#3fb950', resize: 'vertical' }} placeholder="Hello World" />
-                  </div>
-
-                  <div>
-                    <label style={labelStyle}>📝 Note / Hint</label>
-                    <textarea value={cd.note || ''} onChange={e => updateCoding('note', e.target.value)} rows={2}
-                      style={{ ...inputStyle, resize: 'vertical' }} placeholder="Student-কে hint দিন..." />
                   </div>
                 </div>
               )}
