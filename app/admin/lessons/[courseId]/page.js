@@ -2,6 +2,7 @@
 import { use, useState, useEffect } from 'react'
 import Link from 'next/link'
 
+// ─── Resource Uploader ───────────────────────────────────
 function ResourceUploader({ lessonId, resources, onAdd, onRemove, inputStyle, labelStyle }) {
   const [uploading, setUploading] = useState(false)
   const [linkForm, setLinkForm] = useState({ name: '', url: '' })
@@ -15,17 +16,12 @@ function ResourceUploader({ lessonId, resources, onAdd, onRemove, inputStyle, la
       const formData = new FormData()
       formData.append('file', file)
       formData.append('lessonId', lessonId)
-
       const res = await fetch('/api/admin/upload', { method: 'POST', body: formData })
       const data = await res.json()
       if (!res.ok) { alert('Upload error: ' + data.error); return }
       onAdd({ name: data.name, url: data.url, type: data.type, size: data.size })
-    } catch (err) {
-      alert('Upload failed')
-    } finally {
-      setUploading(false)
-      e.target.value = ''
-    }
+    } catch { alert('Upload failed') }
+    finally { setUploading(false); e.target.value = '' }
   }
 
   const addLink = () => {
@@ -40,13 +36,11 @@ function ResourceUploader({ lessonId, resources, onAdd, onRemove, inputStyle, la
     if (type === 'link') return '🔗'
     if (type.includes('pdf')) return '📄'
     if (type.includes('image')) return '🖼️'
-    if (type.includes('video')) return '🎬'
     return '📎'
   }
 
   return (
     <div>
-      {/* Resource List */}
       {resources.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
           {resources.map((r, i) => (
@@ -56,52 +50,28 @@ function ResourceUploader({ lessonId, resources, onAdd, onRemove, inputStyle, la
                 <div style={{ color: '#e6edf3', fontSize: '13px', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
                 {r.size && <div style={{ color: '#484f58', fontSize: '11px' }}>{(r.size / 1024).toFixed(1)} KB</div>}
               </div>
-              <a href={r.url} target="_blank" rel="noreferrer"
-                style={{ color: '#58a6ff', fontSize: '12px', textDecoration: 'none' }}>দেখুন</a>
-              <button onClick={() => onRemove(i)}
-                style={{ background: 'none', border: 'none', color: '#f78166', cursor: 'pointer', fontSize: '14px' }}>✕</button>
+              <a href={r.url} target="_blank" rel="noreferrer" style={{ color: '#58a6ff', fontSize: '12px', textDecoration: 'none' }}>দেখুন</a>
+              <button onClick={() => onRemove(i)} style={{ background: 'none', border: 'none', color: '#f78166', cursor: 'pointer', fontSize: '14px' }}>✕</button>
             </div>
           ))}
         </div>
       )}
-
-      {/* Upload buttons */}
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         <label style={{ background: '#0d2818', border: '1px solid #3fb95044', color: '#3fb950', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', opacity: uploading ? 0.5 : 1 }}>
           {uploading ? '⏳ Upload হচ্ছে...' : '📤 File Upload'}
-          <input type="file" onChange={handleFileUpload} disabled={uploading}
-            accept=".pdf,.doc,.docx,.ppt,.pptx,.zip,.png,.jpg,.jpeg,.mp4"
-            style={{ display: 'none' }} />
+          <input type="file" onChange={handleFileUpload} disabled={uploading} accept=".pdf,.doc,.docx,.ppt,.pptx,.zip,.png,.jpg,.jpeg" style={{ display: 'none' }} />
         </label>
-
-        <button onClick={() => setShowLinkForm(!showLinkForm)}
-          style={{ background: '#0a1628', border: '1px solid #58a6ff44', color: '#58a6ff', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+        <button onClick={() => setShowLinkForm(!showLinkForm)} style={{ background: '#0a1628', border: '1px solid #58a6ff44', color: '#58a6ff', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
           🔗 Link যোগ
         </button>
       </div>
-
-      {/* Link form */}
       {showLinkForm && (
         <div style={{ marginTop: '10px', background: '#161b22', border: '1px solid #30363d', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <input
-            value={linkForm.name}
-            onChange={e => setLinkForm({ ...linkForm, name: e.target.value })}
-            placeholder="Resource-এর নাম (যেমন: Chapter 1 Notes)"
-            style={inputStyle} />
-          <input
-            value={linkForm.url}
-            onChange={e => setLinkForm({ ...linkForm, url: e.target.value })}
-            placeholder="URL (যেমন: https://drive.google.com/...)"
-            style={inputStyle} />
+          <input value={linkForm.name} onChange={e => setLinkForm({ ...linkForm, name: e.target.value })} placeholder="Resource-এর নাম" style={inputStyle} />
+          <input value={linkForm.url} onChange={e => setLinkForm({ ...linkForm, url: e.target.value })} placeholder="URL" style={inputStyle} />
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={addLink}
-              style={{ flex: 1, background: '#238636', border: 'none', color: 'white', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
-              যোগ করুন
-            </button>
-            <button onClick={() => setShowLinkForm(false)}
-              style={{ flex: 1, background: '#21262d', border: '1px solid #30363d', color: '#8b949e', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
-              বাতিল
-            </button>
+            <button onClick={addLink} style={{ flex: 1, background: '#238636', border: 'none', color: 'white', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>যোগ করুন</button>
+            <button onClick={() => setShowLinkForm(false)} style={{ flex: 1, background: '#21262d', border: '1px solid #30363d', color: '#8b949e', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>বাতিল</button>
           </div>
         </div>
       )}
@@ -109,6 +79,7 @@ function ResourceUploader({ lessonId, resources, onAdd, onRemove, inputStyle, la
   )
 }
 
+// ─── Main Component ──────────────────────────────────────
 export default function LessonManager({ params }) {
   const { courseId } = use(params)
   const [course, setCourse] = useState(null)
@@ -119,32 +90,26 @@ export default function LessonManager({ params }) {
   const [saving, setSaving] = useState(false)
 
   const emptyForm = {
-    title: '', video_id: '', content: '', duration: '10 মিনিট',
+    title: '',
+    lesson_type: 'video',
+    video_id: '', content: '', duration: '10 মিনিট',
     quiz_type: 'mcq', order_index: 0,
-    quiz_data: [{ question: '', options: ['', '', '', ''], correct: 0, explanation: '' }],
-    resources: [],
-    homework: ''
+    quiz_data: [{ question: '', options: ['', '', '', ''], correct: 0, explanation: '', code: '' }],
+    resources: [], homework: ''
   }
   const [form, setForm] = useState(emptyForm)
 
   useEffect(() => {
     fetch('/api/admin/courses')
       .then(res => res.json())
-      .then(data => {
-        const found = (data.courses || []).find(c => c.id === courseId)
-        setCourse(found || null)
-      })
-
+      .then(data => setCourse((data.courses || []).find(c => c.id === courseId) || null))
     loadLessons()
   }, [courseId])
 
   const loadLessons = () => {
     fetch(`/api/admin/lessons?courseId=${courseId}`)
       .then(res => res.json())
-      .then(data => {
-        setLessons(data.lessons || [])
-        setLoading(false)
-      })
+      .then(data => { setLessons(data.lessons || []); setLoading(false) })
   }
 
   const openNewModal = () => {
@@ -157,6 +122,7 @@ export default function LessonManager({ params }) {
     setEditingLesson(lesson)
     setForm({
       title: lesson.title || '',
+      lesson_type: lesson.lesson_type || 'video',
       video_id: lesson.video_id || '',
       content: lesson.content || '',
       duration: lesson.duration || '10 মিনিট',
@@ -165,7 +131,9 @@ export default function LessonManager({ params }) {
       resources: lesson.resources || [],
       homework: lesson.homework || '',
       quiz_data: lesson.quiz_data?.length > 0 ? lesson.quiz_data :
-        (lesson.quiz_type === 'none' ? [] : [{ question: '', options: ['', '', '', ''], correct: 0, explanation: '' }])
+        lesson.lesson_type === 'coding'
+          ? [{ language: 'c', header: '#include <stdio.h>\n\n', starter_code: 'int main() {\n    // এখানে লিখুন\n    \n    return 0;\n}', code_cards: [], expected_output: '', note: '' }]
+          : [{ question: '', options: ['', '', '', ''], correct: 0, explanation: '', code: '' }]
     })
     setModalOpen(true)
   }
@@ -176,130 +144,75 @@ export default function LessonManager({ params }) {
     loadLessons()
   }
 
-  const validateQuizData = () => {
-    if (form.quiz_type === 'none') return null
-
-    if (form.quiz_type === 'mcq') {
-      for (let qi = 0; qi < form.quiz_data.length; qi++) {
-        const q = form.quiz_data[qi]
-        if (!q.question || !q.question.trim()) {
-          return `প্রশ্ন ${qi + 1}-এর প্রশ্নের টেক্সট খালি রাখা যাবে না`
-        }
-        const filledOptions = (q.options || []).filter(opt => opt && opt.trim())
-        if (filledOptions.length < 2) {
-          return `প্রশ্ন ${qi + 1}-এ কমপক্ষে ২টি অপশন পূরণ করতে হবে`
-        }
-        if (!q.options[q.correct] || !q.options[q.correct].trim()) {
-          return `প্রশ্ন ${qi + 1}-এর সঠিক উত্তর হিসেবে বাছাই করা অপশনটি খালি — একটি পূরণকৃত অপশনকে সঠিক হিসেবে চিহ্নিত করুন`
-        }
-      }
-    } else if (form.quiz_type === 'dropdown') {
-      for (let di = 0; di < form.quiz_data.length; di++) {
-        const dd = form.quiz_data[di]
-        if (!dd.question || !dd.question.trim()) {
-          return 'Dropdown সমস্যার মূল প্রশ্ন খালি রাখা যাবে না'
-        }
-        const steps = dd.steps || []
-        if (steps.length === 0) {
-          return 'কমপক্ষে একটি ধাপ যোগ করতে হবে'
-        }
-        for (let si = 0; si < steps.length; si++) {
-          const step = steps[si]
-          if (!step.label || !step.label.trim()) {
-            return `ধাপ ${si + 1}-এর লেবেল খালি রাখা যাবে না`
-          }
-          const filledOptions = (step.options || []).filter(opt => opt && opt.trim())
-          if (filledOptions.length < 2) {
-            return `ধাপ ${si + 1}-এ কমপক্ষে ২টি অপশন পূরণ করতে হবে`
-          }
-        }
-      }
-    }
-    return null
-  }
-
   const saveLesson = async () => {
     if (!form.title) { alert('টাইটেল আবশ্যক'); return }
-
-    const quizError = validateQuizData()
-    if (quizError) {
-      alert('⚠️ ' + quizError)
-      return
-    }
-
     setSaving(true)
     try {
       const payload = { ...form, course_id: courseId }
       let res
       if (editingLesson) {
-        res = await fetch('/api/admin/lessons', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: editingLesson.id, ...payload })
-        })
+        res = await fetch('/api/admin/lessons', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingLesson.id, ...payload }) })
       } else {
-        res = await fetch('/api/admin/lessons', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        })
+        res = await fetch('/api/admin/lessons', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       }
       const data = await res.json()
       if (!res.ok) { alert('সমস্যা: ' + (data.error || 'অজানা')); return }
       setModalOpen(false)
       loadLessons()
-    } catch (err) {
-      alert('নেটওয়ার্ক সমস্যা')
-    } finally {
-      setSaving(false)
-    }
+    } catch { alert('নেটওয়ার্ক সমস্যা') }
+    finally { setSaving(false) }
   }
 
-  const addMCQQuestion = () => {
-    setForm({ ...form, quiz_data: [...form.quiz_data, { question: '', options: ['', '', '', ''], correct: 0, explanation: '' }] })
-  }
-
-  const removeMCQQuestion = (qi) => {
-    setForm({ ...form, quiz_data: form.quiz_data.filter((_, i) => i !== qi) })
-  }
-
+  // MCQ helpers
+  const addMCQQuestion = () => setForm({ ...form, quiz_data: [...form.quiz_data, { question: '', options: ['', '', '', ''], correct: 0, explanation: '', code: '' }] })
+  const removeMCQQuestion = (qi) => setForm({ ...form, quiz_data: form.quiz_data.filter((_, i) => i !== qi) })
   const updateMCQQuestion = (qi, field, value) => {
     const updated = [...form.quiz_data]
     updated[qi] = { ...updated[qi], [field]: value }
     setForm({ ...form, quiz_data: updated })
   }
-
   const updateMCQOption = (qi, oi, value) => {
     const updated = [...form.quiz_data]
-    const options = [...updated[qi].options]
-    options[oi] = value
-    updated[qi] = { ...updated[qi], options }
-    setForm({ ...form, quiz_data: updated })
+    updated[qi].options[oi] = value
+    setForm({ ...form, quiz_data: [...updated] })
   }
 
+  // Dropdown helpers
   const addDropdownStep = (di) => {
     const updated = [...form.quiz_data]
     updated[di].steps = [...(updated[di].steps || []), { label: '', options: ['', ''], correct: 0 }]
     setForm({ ...form, quiz_data: updated })
   }
-
   const updateDropdownStep = (di, si, field, value) => {
     const updated = [...form.quiz_data]
     updated[di].steps[si] = { ...updated[di].steps[si], [field]: value }
     setForm({ ...form, quiz_data: updated })
   }
-
   const updateDropdownStepOption = (di, si, oi, value) => {
     const updated = [...form.quiz_data]
-    const options = [...updated[di].steps[si].options]
-    options[oi] = value
-    updated[di].steps[si] = { ...updated[di].steps[si], options }
+    updated[di].steps[si].options[oi] = value
+    setForm({ ...form, quiz_data: [...updated] })
+  }
+
+  // Coding helpers
+  const updateCoding = (field, value) => {
+    const updated = [...form.quiz_data]
+    updated[0] = { ...updated[0], [field]: value }
+    setForm({ ...form, quiz_data: updated })
+  }
+  const updateCard = (ci, field, value) => {
+    const updated = [...form.quiz_data]
+    const cards = [...(updated[0].code_cards || [])]
+    cards[ci] = { ...cards[ci], [field]: value }
+    updated[0] = { ...updated[0], code_cards: cards }
     setForm({ ...form, quiz_data: updated })
   }
 
   const card = { background: '#161b22', border: '1px solid #30363d', borderRadius: '12px' }
   const inputStyle = { width: '100%', background: '#0d1117', border: '1px solid #30363d', color: '#e6edf3', padding: '10px', borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }
   const labelStyle = { color: '#8b949e', fontSize: '12px', fontWeight: '600', display: 'block', marginBottom: '6px' }
+
+  const cd = form.quiz_data?.[0] || {}
 
   if (loading) return (
     <div style={{ minHeight: '100vh', background: '#0d1117', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -311,22 +224,19 @@ export default function LessonManager({ params }) {
     <div style={{ minHeight: '100vh', background: '#0d1117', color: '#e6edf3', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', marginTop: '-64px', paddingTop: '64px' }}>
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '32px' }}>
 
+        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
-          <Link href="/admin" style={{ background: '#21262d', border: '1px solid #30363d', color: '#8b949e', padding: '8px 16px', borderRadius: '8px', textDecoration: 'none', fontSize: '13px' }}>
-            ← Admin
-          </Link>
+          <Link href="/admin" style={{ background: '#21262d', border: '1px solid #30363d', color: '#8b949e', padding: '8px 16px', borderRadius: '8px', textDecoration: 'none', fontSize: '13px' }}>← Admin</Link>
           <div>
-            <h1 style={{ color: '#e6edf3', fontWeight: '800', fontSize: '22px', margin: '0 0 4px' }}>
-              {course?.icon} {course?.title}
-            </h1>
+            <h1 style={{ color: '#e6edf3', fontWeight: '800', fontSize: '22px', margin: '0 0 4px' }}>{course?.icon} {course?.title}</h1>
             <p style={{ color: '#8b949e', fontSize: '13px', margin: 0 }}>মোট {lessons.length} টি lesson</p>
           </div>
-          <button onClick={openNewModal}
-            style={{ marginLeft: 'auto', background: '#7c3aed', border: 'none', color: 'white', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '14px' }}>
+          <button onClick={openNewModal} style={{ marginLeft: 'auto', background: '#7c3aed', border: 'none', color: 'white', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '14px' }}>
             + নতুন Lesson
           </button>
         </div>
 
+        {/* Lesson List */}
         {lessons.length === 0 ? (
           <div style={{ ...card, padding: '40px', textAlign: 'center', color: '#484f58' }}>
             এখনো কোনো lesson যোগ করা হয়নি। উপরে "+ নতুন Lesson" চাপুন।
@@ -335,35 +245,28 @@ export default function LessonManager({ params }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {lessons.map((lesson, i) => (
               <div key={lesson.id} style={{ ...card, padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ width: '36px', height: '36px', background: '#7c3aed', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: '800', fontSize: '16px', flexShrink: 0 }}>
-                  {i + 1}
+                <div style={{ width: '36px', height: '36px', background: lesson.lesson_type === 'coding' ? '#1e3a5f' : '#7c3aed', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: '800', fontSize: '16px', flexShrink: 0 }}>
+                  {lesson.lesson_type === 'coding' ? '💻' : i + 1}
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ color: '#e6edf3', fontWeight: '600', fontSize: '15px', marginBottom: '4px' }}>{lesson.title}</div>
-                  <div style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ display: 'flex', gap: '10px' }}>
                     <span style={{ color: '#8b949e', fontSize: '12px' }}>⏱ {lesson.duration}</span>
-                    {lesson.video_id && <span style={{ color: '#8b949e', fontSize: '12px' }}>▶ Video: {lesson.video_id}</span>}
+                    {lesson.video_id && <span style={{ color: '#8b949e', fontSize: '12px' }}>▶ {lesson.video_id}</span>}
                     <span style={{
-                      background: lesson.quiz_type === 'mcq' ? '#1f103580' : lesson.quiz_type === 'dropdown' ? '#0d281880' : '#21262d',
-                      color: lesson.quiz_type === 'mcq' ? '#a371f7' : lesson.quiz_type === 'dropdown' ? '#3fb950' : '#8b949e',
+                      background: lesson.lesson_type === 'coding' ? '#0a162880' : lesson.quiz_type === 'mcq' ? '#1f103580' : lesson.quiz_type === 'dropdown' ? '#0d281880' : '#21262d',
+                      color: lesson.lesson_type === 'coding' ? '#3b82f6' : lesson.quiz_type === 'mcq' ? '#a371f7' : lesson.quiz_type === 'dropdown' ? '#3fb950' : '#8b949e',
                       fontSize: '11px', padding: '1px 8px', borderRadius: '6px'
                     }}>
-                      {lesson.quiz_type === 'mcq' ? 'MCQ' : lesson.quiz_type === 'dropdown' ? 'Dropdown' : 'Quiz নেই'}
+                      {lesson.lesson_type === 'coding' ? '💻 Coding' : lesson.quiz_type === 'mcq' ? 'MCQ' : lesson.quiz_type === 'dropdown' ? 'Dropdown' : 'Quiz নেই'}
                     </span>
-                    {lesson.quiz_type !== 'none' && (
-                      <span style={{ color: '#484f58', fontSize: '12px' }}>{(lesson.quiz_data || []).length} প্রশ্ন</span>
-                    )}
+                    {(lesson.resources || []).length > 0 && <span style={{ color: '#58a6ff', fontSize: '11px' }}>📎 {lesson.resources.length}</span>}
+                    {lesson.homework && <span style={{ color: '#f0c000', fontSize: '11px' }}>📝 HW</span>}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={() => openEditModal(lesson)}
-                    style={{ background: '#21262d', border: '1px solid #30363d', color: '#c9d1d9', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
-                    এডিট
-                  </button>
-                  <button onClick={() => deleteLesson(lesson)}
-                    style={{ background: '#2a0a00', border: '1px solid #f7816644', color: '#f78166', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
-                    🗑️
-                  </button>
+                  <button onClick={() => openEditModal(lesson)} style={{ background: '#21262d', border: '1px solid #30363d', color: '#c9d1d9', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>এডিট</button>
+                  <button onClick={() => deleteLesson(lesson)} style={{ background: '#2a0a00', border: '1px solid #f7816644', color: '#f78166', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>🗑️</button>
                 </div>
               </div>
             ))}
@@ -371,234 +274,282 @@ export default function LessonManager({ params }) {
         )}
       </div>
 
+      {/* Modal */}
       {modalOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 100, overflowY: 'auto', padding: '32px 16px' }}>
-          <div style={{ ...card, padding: '24px', width: '600px', minWidth: '320px' }}>
+          <div style={{ ...card, padding: '24px', width: '620px', minWidth: '320px' }}>
             <h3 style={{ color: '#e6edf3', fontWeight: '700', margin: '0 0 20px', fontSize: '16px' }}>
               {editingLesson ? 'Lesson এডিট করুন' : 'নতুন Lesson যোগ করুন'}
             </h3>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+              {/* Title */}
               <div>
                 <label style={labelStyle}>টাইটেল *</label>
-                <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} style={inputStyle} placeholder="যেমন: প্রোগ্রামিং কী?" />
+                <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} style={inputStyle} placeholder="Lesson-এর নাম" />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={labelStyle}>YouTube Video ID</label>
-                  <input value={form.video_id} onChange={e => setForm({ ...form, video_id: e.target.value })} style={inputStyle} placeholder="যেমন: zOjov-2OZl0" />
-                </div>
-                <div>
-                  <label style={labelStyle}>সময়কাল</label>
-                  <input value={form.duration} onChange={e => setForm({ ...form, duration: e.target.value })} style={inputStyle} placeholder="যেমন: 10 মিনিট" />
-                </div>
-              </div>
-
+              {/* Lesson Type Selector */}
               <div>
-                <label style={labelStyle}>কন্টেন্ট (Markdown)</label>
-                <textarea value={form.content} onChange={e => setForm({ ...form, content: e.target.value })}
-                  rows={5} style={{ ...inputStyle, resize: 'vertical' }}
-                  placeholder="# শিরোনাম&#10;&#10;এখানে lesson-এর নোট লিখুন..." />
-              </div>
-
-              {/* Homework */}
-              <div>
-                <label style={labelStyle}>📝 Homework (ঐচ্ছিক)</label>
-                <textarea
-                  value={form.homework}
-                  onChange={e => setForm({ ...form, homework: e.target.value })}
-                  rows={3}
-                  style={{ ...inputStyle, resize: 'vertical' }}
-                  placeholder="এই lesson-এর homework বা assignment লিখুন..." />
-              </div>
-
-              {/* Resources */}
-              <div style={{ background: '#0d1117', borderRadius: '10px', padding: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <label style={{ ...labelStyle, margin: 0, color: '#58a6ff' }}>📎 Resources</label>
-                </div>
-
-                {/* Upload */}
-                <ResourceUploader
-                  lessonId={editingLesson?.id || 'new'}
-                  resources={form.resources}
-                  onAdd={(resource) => setForm({ ...form, resources: [...form.resources, resource] })}
-                  onRemove={(i) => setForm({ ...form, resources: form.resources.filter((_, idx) => idx !== i) })}
-                  inputStyle={inputStyle}
-                  labelStyle={labelStyle}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={labelStyle}>Quiz টাইপ</label>
-                  <select value={form.quiz_type} onChange={e => {
-                    const newType = e.target.value
-                    let newQuizData = []
-                    if (newType === 'mcq') {
-                      newQuizData = [{ question: '', options: ['', '', '', ''], correct: 0, explanation: '' }]
-                    } else if (newType === 'dropdown') {
-                      newQuizData = [{ question: '', steps: [{ label: '', options: ['', ''], correct: 0 }] }]
-                    }
-                    setForm({ ...form, quiz_type: newType, quiz_data: newQuizData })
-                  }} style={inputStyle}>
-                    <option value="mcq">MCQ Quiz</option>
-                    <option value="dropdown">Dropdown Problem</option>
-                    <option value="none">কোনো Quiz নেই</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={labelStyle}>ক্রম (Order)</label>
-                  <input type="number" value={form.order_index} onChange={e => setForm({ ...form, order_index: parseInt(e.target.value) || 0 })} style={inputStyle} />
+                <label style={labelStyle}>Lesson Type</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <button onClick={() => setForm({ ...form, lesson_type: 'video', quiz_type: 'mcq', quiz_data: [{ question: '', options: ['', '', '', ''], correct: 0, explanation: '', code: '' }] })}
+                    style={{ padding: '14px', borderRadius: '10px', border: `2px solid ${form.lesson_type === 'video' ? '#7c3aed' : '#30363d'}`, background: form.lesson_type === 'video' ? '#1f1035' : '#0d1117', cursor: 'pointer', textAlign: 'center' }}>
+                    <div style={{ fontSize: '28px', marginBottom: '6px' }}>🎬</div>
+                    <div style={{ color: form.lesson_type === 'video' ? '#a371f7' : '#8b949e', fontWeight: '700', fontSize: '14px' }}>Video Lesson</div>
+                    <div style={{ color: '#484f58', fontSize: '11px', marginTop: '2px' }}>Video + MCQ/Dropdown</div>
+                  </button>
+                  <button onClick={() => setForm({ ...form, lesson_type: 'coding', quiz_type: 'coding', quiz_data: [{ language: 'c', header: '#include <stdio.h>\n\n', starter_code: 'int main() {\n    // এখানে লিখুন\n    \n    return 0;\n}', code_cards: [], expected_output: '', note: '' }] })}
+                    style={{ padding: '14px', borderRadius: '10px', border: `2px solid ${form.lesson_type === 'coding' ? '#3b82f6' : '#30363d'}`, background: form.lesson_type === 'coding' ? '#0a1628' : '#0d1117', cursor: 'pointer', textAlign: 'center' }}>
+                    <div style={{ fontSize: '28px', marginBottom: '6px' }}>💻</div>
+                    <div style={{ color: form.lesson_type === 'coding' ? '#3b82f6' : '#8b949e', fontWeight: '700', fontSize: '14px' }}>Coding Lesson</div>
+                    <div style={{ color: '#484f58', fontSize: '11px', marginTop: '2px' }}>শুধু Practice Problem</div>
+                  </button>
                 </div>
               </div>
 
-              {form.quiz_type === 'none' && (
-                <div style={{ background: '#0d1117', border: '1px dashed #30363d', borderRadius: '10px', padding: '20px', textAlign: 'center' }}>
-                  <p style={{ color: '#484f58', fontSize: '13px', margin: 0 }}>
-                    📝 এই lesson-এ কোনো Quiz থাকবে না। ইউজার শুধু ভিডিও/নোটস দেখে পরের lesson-এ যেতে পারবে।
-                  </p>
-                </div>
-              )}
-
-              {form.quiz_type === 'mcq' && (
-                <div style={{ background: '#0d1117', borderRadius: '10px', padding: '16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                    <label style={{ ...labelStyle, margin: 0, color: '#a371f7' }}>🧠 MCQ প্রশ্নসমূহ</label>
-                    <button onClick={addMCQQuestion}
-                      style={{ background: '#1f1035', border: '1px solid #7c3aed44', color: '#a371f7', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
-                      + প্রশ্ন যোগ
-                    </button>
+              {/* ── VIDEO LESSON FIELDS ── */}
+              {form.lesson_type === 'video' && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={labelStyle}>YouTube Video ID</label>
+                      <input value={form.video_id} onChange={e => setForm({ ...form, video_id: e.target.value })} style={inputStyle} placeholder="zOjov-2OZl0" />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>সময়কাল</label>
+                      <input value={form.duration} onChange={e => setForm({ ...form, duration: e.target.value })} style={inputStyle} placeholder="10 মিনিট" />
+                    </div>
                   </div>
 
-                  {form.quiz_data.map((q, qi) => (
-                    <div key={qi} style={{ background: '#161b22', borderRadius: '8px', padding: '14px', marginBottom: '10px', border: '1px solid #30363d' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                        <span style={{ color: '#8b949e', fontSize: '12px', fontWeight: '600' }}>প্রশ্ন {qi + 1}</span>
-                        {form.quiz_data.length > 1 && (
-                          <button onClick={() => removeMCQQuestion(qi)}
-                            style={{ background: 'none', border: 'none', color: '#f78166', cursor: 'pointer', fontSize: '12px' }}>
-                            ✕ সরান
-                          </button>
-                        )}
-                      </div>
-                      <input value={q.question} onChange={e => updateMCQQuestion(qi, 'question', e.target.value)}
-                        style={{ ...inputStyle, marginBottom: '10px' }} placeholder="প্রশ্ন লিখুন..." />
+                  <div>
+                    <label style={labelStyle}>কন্টেন্ট (Markdown)</label>
+                    <textarea value={form.content} onChange={e => setForm({ ...form, content: e.target.value })} rows={4} style={{ ...inputStyle, resize: 'vertical' }} placeholder="# শিরোনাম..." />
+                  </div>
 
-                      {/* Code Block */}
-                      <div style={{ marginBottom: '10px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                          <label style={{ ...labelStyle, margin: 0 }}>💻 Code Block (ঐচ্ছিক)</label>
-                          <button
-                            onClick={() => updateMCQQuestion(qi, 'code', q.code ? '' : '// code এখানে লিখুন')}
-                            style={{ background: q.code ? '#2a0a00' : '#0d2818', border: `1px solid ${q.code ? '#f7816644' : '#3fb95044'}`, color: q.code ? '#f78166' : '#3fb950', padding: '3px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px' }}>
-                            {q.code ? '✕ সরান' : '+ যোগ করুন'}
-                          </button>
-                        </div>
-                        {q.code !== undefined && q.code !== '' && (
-                          <textarea
-                            value={q.code}
-                            onChange={e => updateMCQQuestion(qi, 'code', e.target.value)}
-                            rows={4}
-                            style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', resize: 'vertical', background: '#0d1117', color: '#58a6ff' }}
-                            placeholder={`#include <stdio.h>\nint main() {\n    printf("Hello");\n    return 0;\n}`}
-                          />
-                        )}
-                      </div>
-
-                      {q.options.map((opt, oi) => (
-                        <div key={oi} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                          <input type="radio" name={`correct-${qi}`} checked={q.correct === oi}
-                            onChange={() => updateMCQQuestion(qi, 'correct', oi)}
-                            style={{ cursor: 'pointer', accentColor: '#3fb950' }} />
-                          <input value={opt} onChange={e => updateMCQOption(qi, oi, e.target.value)}
-                            style={{ ...inputStyle }} placeholder={`অপশন ${['A', 'B', 'C', 'D'][oi]}`} />
-                        </div>
-                      ))}
-                      <p style={{ color: '#484f58', fontSize: '11px', margin: '8px 0 0' }}>✓ চিহ্নিত অপশনটি সঠিক উত্তর</p>
-
-                      {/* Explanation */}
-                      <div style={{ marginTop: '10px' }}>
-                        <label style={{ ...labelStyle, color: '#58a6ff' }}>💡 Explanation (ঐচ্ছিক)</label>
-                        <textarea
-                          value={q.explanation || ''}
-                          onChange={e => updateMCQQuestion(qi, 'explanation', e.target.value)}
-                          rows={2}
-                          style={{ ...inputStyle, resize: 'vertical', fontSize: '12px' }}
-                          placeholder="এই প্রশ্নের সঠিক উত্তরের ব্যাখ্যা লিখুন (code সহ)..." />
-                      </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={labelStyle}>ক্রম (Order)</label>
+                      <input type="number" value={form.order_index} onChange={e => setForm({ ...form, order_index: parseInt(e.target.value) || 0 })} style={inputStyle} />
                     </div>
-                  ))}
-                </div>
-              )}
+                    <div>
+                      <label style={labelStyle}>Quiz টাইপ</label>
+                      <select value={form.quiz_type} onChange={e => {
+                        const t = e.target.value
+                        setForm({
+                          ...form, quiz_type: t,
+                          quiz_data: t === 'mcq' ? [{ question: '', options: ['', '', '', ''], correct: 0, explanation: '', code: '' }]
+                            : t === 'dropdown' ? [{ question: '', steps: [{ label: '', options: ['', ''], correct: 0 }] }]
+                            : []
+                        })
+                      }} style={inputStyle}>
+                        <option value="mcq">🧠 MCQ Quiz</option>
+                        <option value="dropdown">📋 Dropdown</option>
+                        <option value="none">Quiz নেই</option>
+                      </select>
+                    </div>
+                  </div>
 
-              {form.quiz_type === 'dropdown' && (
-                <div style={{ background: '#0d1117', borderRadius: '10px', padding: '16px' }}>
-                  <label style={{ ...labelStyle, color: '#58a6ff', marginBottom: '12px' }}>📋 Dropdown সমস্যা</label>
-
-                  {form.quiz_data.map((dd, di) => (
-                    <div key={di} style={{ background: '#161b22', borderRadius: '8px', padding: '14px', border: '1px solid #30363d' }}>
-                      <div style={{ marginBottom: '10px' }}>
-                        <label style={labelStyle}>মূল প্রশ্ন</label>
-                        <input value={dd.question}
-                          onChange={e => {
-                            const updated = [...form.quiz_data]
-                            updated[di] = { ...updated[di], question: e.target.value }
-                            setForm({ ...form, quiz_data: updated })
-                          }}
-                          style={inputStyle} placeholder="সমস্যার বর্ণনা লিখুন..." />
+                  {/* MCQ Builder */}
+                  {form.quiz_type === 'mcq' && (
+                    <div style={{ background: '#0d1117', borderRadius: '10px', padding: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                        <label style={{ ...labelStyle, margin: 0, color: '#a371f7' }}>🧠 MCQ প্রশ্নসমূহ</label>
+                        <button onClick={addMCQQuestion} style={{ background: '#1f1035', border: '1px solid #7c3aed44', color: '#a371f7', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>+ প্রশ্ন যোগ</button>
                       </div>
-
-                      <label style={{ ...labelStyle, marginBottom: '8px' }}>ধাপসমূহ:</label>
-                      {(dd.steps || []).map((step, si) => (
-                        <div key={si} style={{ background: '#0d1117', borderRadius: '6px', padding: '10px', marginBottom: '8px' }}>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-                            <div>
-                              <label style={labelStyle}>ধাপের লেবেল</label>
-                              <input value={step.label} onChange={e => updateDropdownStep(di, si, 'label', e.target.value)}
-                                style={inputStyle} placeholder="যেমন: প্রথম ধাপ" />
-                            </div>
-                            <div>
-                              <label style={labelStyle}>সঠিক উত্তর (index)</label>
-                              <input type="number" min="0" value={step.correct}
-                                onChange={e => updateDropdownStep(di, si, 'correct', parseInt(e.target.value) || 0)}
-                                style={inputStyle} />
-                            </div>
+                      {form.quiz_data.map((q, qi) => (
+                        <div key={qi} style={{ background: '#161b22', borderRadius: '8px', padding: '14px', marginBottom: '10px', border: '1px solid #30363d' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                            <span style={{ color: '#8b949e', fontSize: '12px', fontWeight: '600' }}>প্রশ্ন {qi + 1}</span>
+                            {form.quiz_data.length > 1 && <button onClick={() => removeMCQQuestion(qi)} style={{ background: 'none', border: 'none', color: '#f78166', cursor: 'pointer', fontSize: '12px' }}>✕ সরান</button>}
                           </div>
-                          {(step.options || []).map((opt, oi) => (
-                            <div key={oi} style={{ display: 'flex', gap: '8px', marginBottom: '6px', alignItems: 'center' }}>
-                              <span style={{ color: '#484f58', fontSize: '12px', width: '20px' }}>{oi}.</span>
-                              <input value={opt} onChange={e => updateDropdownStepOption(di, si, oi, e.target.value)}
-                                style={inputStyle} placeholder={`অপশন ${oi + 1}`} />
+                          <input value={q.question} onChange={e => updateMCQQuestion(qi, 'question', e.target.value)} style={{ ...inputStyle, marginBottom: '10px' }} placeholder="প্রশ্ন লিখুন..." />
+
+                          {/* Code Block */}
+                          <div style={{ marginBottom: '10px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                              <label style={{ ...labelStyle, margin: 0 }}>💻 Code Block (ঐচ্ছিক)</label>
+                              <button onClick={() => updateMCQQuestion(qi, 'code', q.code ? '' : '// code এখানে লিখুন')}
+                                style={{ background: q.code ? '#2a0a00' : '#0d2818', border: `1px solid ${q.code ? '#f7816644' : '#3fb95044'}`, color: q.code ? '#f78166' : '#3fb950', padding: '3px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px' }}>
+                                {q.code ? '✕ সরান' : '+ যোগ করুন'}
+                              </button>
+                            </div>
+                            {q.code !== undefined && q.code !== '' && (
+                              <textarea value={q.code} onChange={e => updateMCQQuestion(qi, 'code', e.target.value)} rows={3}
+                                style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', resize: 'vertical', color: '#58a6ff' }}
+                                placeholder={'#include <stdio.h>\nint main() { ... }'} />
+                            )}
+                          </div>
+
+                          {q.options.map((opt, oi) => (
+                            <div key={oi} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                              <input type="radio" name={`correct-${qi}`} checked={q.correct === oi} onChange={() => updateMCQQuestion(qi, 'correct', oi)} style={{ cursor: 'pointer', accentColor: '#3fb950' }} />
+                              <input value={opt} onChange={e => updateMCQOption(qi, oi, e.target.value)} style={{ ...inputStyle }} placeholder={`অপশন ${['A', 'B', 'C', 'D'][oi]}`} />
                             </div>
                           ))}
-                          <button onClick={() => {
-                            const updated = [...form.quiz_data]
-                            updated[di].steps[si].options = [...updated[di].steps[si].options, '']
-                            setForm({ ...form, quiz_data: updated })
-                          }} style={{ background: 'none', border: '1px dashed #30363d', color: '#484f58', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', marginTop: '4px' }}>
-                            + অপশন যোগ
+                          <p style={{ color: '#484f58', fontSize: '11px', margin: '8px 0 10px' }}>✓ চিহ্নিত অপশনটি সঠিক উত্তর</p>
+
+                          {/* Explanation */}
+                          <div>
+                            <label style={{ ...labelStyle, color: '#58a6ff' }}>💡 Explanation (ঐচ্ছিক)</label>
+                            <textarea value={q.explanation || ''} onChange={e => updateMCQQuestion(qi, 'explanation', e.target.value)} rows={2}
+                              style={{ ...inputStyle, resize: 'vertical', fontSize: '12px' }} placeholder="সঠিক উত্তরের ব্যাখ্যা লিখুন..." />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Dropdown Builder */}
+                  {form.quiz_type === 'dropdown' && (
+                    <div style={{ background: '#0d1117', borderRadius: '10px', padding: '16px' }}>
+                      <label style={{ ...labelStyle, color: '#58a6ff', marginBottom: '12px' }}>📋 Dropdown সমস্যা</label>
+                      {form.quiz_data.map((dd, di) => (
+                        <div key={di} style={{ background: '#161b22', borderRadius: '8px', padding: '14px', border: '1px solid #30363d' }}>
+                          <div style={{ marginBottom: '10px' }}>
+                            <label style={labelStyle}>মূল প্রশ্ন</label>
+                            <input value={dd.question} onChange={e => {
+                              const updated = [...form.quiz_data]
+                              updated[di] = { ...updated[di], question: e.target.value }
+                              setForm({ ...form, quiz_data: updated })
+                            }} style={inputStyle} placeholder="সমস্যার বর্ণনা..." />
+                          </div>
+                          <label style={{ ...labelStyle, marginBottom: '8px' }}>ধাপসমূহ:</label>
+                          {(dd.steps || []).map((step, si) => (
+                            <div key={si} style={{ background: '#0d1117', borderRadius: '6px', padding: '10px', marginBottom: '8px' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                                <div>
+                                  <label style={labelStyle}>লেবেল</label>
+                                  <input value={step.label} onChange={e => updateDropdownStep(di, si, 'label', e.target.value)} style={inputStyle} placeholder="ধাপের নাম" />
+                                </div>
+                                <div>
+                                  <label style={labelStyle}>সঠিক (index)</label>
+                                  <input type="number" min="0" value={step.correct} onChange={e => updateDropdownStep(di, si, 'correct', parseInt(e.target.value) || 0)} style={inputStyle} />
+                                </div>
+                              </div>
+                              {(step.options || []).map((opt, oi) => (
+                                <div key={oi} style={{ display: 'flex', gap: '8px', marginBottom: '6px', alignItems: 'center' }}>
+                                  <span style={{ color: '#484f58', fontSize: '12px', width: '20px' }}>{oi}.</span>
+                                  <input value={opt} onChange={e => updateDropdownStepOption(di, si, oi, e.target.value)} style={inputStyle} placeholder={`অপশন ${oi + 1}`} />
+                                </div>
+                              ))}
+                              <button onClick={() => {
+                                const updated = [...form.quiz_data]
+                                updated[di].steps[si].options = [...updated[di].steps[si].options, '']
+                                setForm({ ...form, quiz_data: updated })
+                              }} style={{ background: 'none', border: '1px dashed #30363d', color: '#484f58', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', marginTop: '4px' }}>
+                                + অপশন যোগ
+                              </button>
+                            </div>
+                          ))}
+                          <button onClick={() => addDropdownStep(di)} style={{ background: '#0d2818', border: '1px solid #3fb95044', color: '#3fb950', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', marginTop: '8px' }}>
+                            + নতুন ধাপ যোগ
                           </button>
                         </div>
                       ))}
-                      <button onClick={() => addDropdownStep(di)}
-                        style={{ background: '#0d2818', border: '1px solid #3fb95044', color: '#3fb950', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', marginTop: '8px' }}>
-                        + নতুন ধাপ যোগ
+                    </div>
+                  )}
+
+                  {/* Homework */}
+                  <div>
+                    <label style={labelStyle}>📝 Homework (ঐচ্ছিক)</label>
+                    <textarea value={form.homework} onChange={e => setForm({ ...form, homework: e.target.value })} rows={3} style={{ ...inputStyle, resize: 'vertical' }} placeholder="Homework বা assignment..." />
+                  </div>
+
+                  {/* Resources */}
+                  <div style={{ background: '#0d1117', borderRadius: '10px', padding: '16px' }}>
+                    <label style={{ ...labelStyle, color: '#58a6ff', marginBottom: '10px' }}>📎 Resources</label>
+                    <ResourceUploader
+                      lessonId={editingLesson?.id || 'new'}
+                      resources={form.resources}
+                      onAdd={(r) => setForm({ ...form, resources: [...form.resources, r] })}
+                      onRemove={(i) => setForm({ ...form, resources: form.resources.filter((_, idx) => idx !== i) })}
+                      inputStyle={inputStyle}
+                      labelStyle={labelStyle}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* ── CODING LESSON FIELDS ── */}
+              {form.lesson_type === 'coding' && (
+                <div style={{ background: '#0d1117', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <label style={{ ...labelStyle, color: '#3b82f6', margin: 0 }}>💻 Coding Lesson Builder</label>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={labelStyle}>Language</label>
+                      <select value={cd.language || 'c'} onChange={e => updateCoding('language', e.target.value)} style={inputStyle}>
+                        <option value="c">C</option>
+                        <option value="cpp">C++</option>
+                        <option value="python">Python</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>সময়কাল</label>
+                      <input value={form.duration} onChange={e => setForm({ ...form, duration: e.target.value })} style={inputStyle} placeholder="15 মিনিট" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={labelStyle}>📦 Header / Imports (read-only)</label>
+                    <textarea value={cd.header || ''} onChange={e => updateCoding('header', e.target.value)} rows={3}
+                      style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', color: '#58a6ff', resize: 'vertical' }} placeholder="#include <stdio.h>" />
+                  </div>
+
+                  <div>
+                    <label style={labelStyle}>✏️ Starter Code</label>
+                    <textarea value={cd.starter_code || ''} onChange={e => updateCoding('starter_code', e.target.value)} rows={6}
+                      style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', resize: 'vertical' }} placeholder={'int main() {\n    // এখানে লিখুন\n    return 0;\n}'} />
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label style={{ ...labelStyle, margin: 0 }}>🃏 Code Cards</label>
+                      <button onClick={() => {
+                        const updated = [...form.quiz_data]
+                        updated[0] = { ...updated[0], code_cards: [...(updated[0].code_cards || []), { id: Date.now().toString(), label: '', code: '' }] }
+                        setForm({ ...form, quiz_data: updated })
+                      }} style={{ background: '#1f1035', border: '1px solid #7c3aed44', color: '#a371f7', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
+                        + Card যোগ
                       </button>
                     </div>
-                  ))}
+                    {(cd.code_cards || []).map((c, ci) => (
+                      <div key={c.id || ci} style={{ background: '#161b22', borderRadius: '8px', padding: '10px', marginBottom: '8px', border: '1px solid #30363d' }}>
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
+                          <input value={c.label} onChange={e => updateCard(ci, 'label', e.target.value)} style={{ ...inputStyle, flex: 1 }} placeholder="Card label" />
+                          <button onClick={() => {
+                            const updated = [...form.quiz_data]
+                            updated[0].code_cards = updated[0].code_cards.filter((_, idx) => idx !== ci)
+                            setForm({ ...form, quiz_data: updated })
+                          }} style={{ background: '#2a0a00', border: '1px solid #f7816644', color: '#f78166', padding: '0 10px', borderRadius: '6px', cursor: 'pointer' }}>✕</button>
+                        </div>
+                        <textarea value={c.code} onChange={e => updateCard(ci, 'code', e.target.value)} rows={2}
+                          style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', color: '#a371f7', resize: 'vertical' }} placeholder={'printf("Hello World\\n");'} />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div>
+                    <label style={labelStyle}>✅ Expected Output</label>
+                    <textarea value={cd.expected_output || ''} onChange={e => updateCoding('expected_output', e.target.value)} rows={3}
+                      style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '12px', color: '#3fb950', resize: 'vertical' }} placeholder="Hello World" />
+                  </div>
+
+                  <div>
+                    <label style={labelStyle}>📝 Note / Hint</label>
+                    <textarea value={cd.note || ''} onChange={e => updateCoding('note', e.target.value)} rows={2}
+                      style={{ ...inputStyle, resize: 'vertical' }} placeholder="Student-কে hint দিন..." />
+                  </div>
                 </div>
               )}
             </div>
 
+            {/* Save / Cancel */}
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-              <button onClick={() => setModalOpen(false)}
-                style={{ flex: 1, background: '#21262d', border: '1px solid #30363d', color: '#c9d1d9', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '14px' }}>
-                বাতিল
-              </button>
-              <button onClick={saveLesson} disabled={saving}
-                style={{ flex: 1, background: '#238636', border: 'none', color: 'white', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '14px', opacity: saving ? 0.7 : 1 }}>
+              <button onClick={() => setModalOpen(false)} style={{ flex: 1, background: '#21262d', border: '1px solid #30363d', color: '#c9d1d9', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '14px' }}>বাতিল</button>
+              <button onClick={saveLesson} disabled={saving} style={{ flex: 1, background: '#238636', border: 'none', color: 'white', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '14px', opacity: saving ? 0.7 : 1 }}>
                 {saving ? 'সংরক্ষণ হচ্ছে...' : 'সংরক্ষণ করুন'}
               </button>
             </div>

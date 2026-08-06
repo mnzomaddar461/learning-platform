@@ -3,12 +3,323 @@ import { use, useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import { useToast } from '../../components/Toast'
-import { useAuthGuard } from '../../lib/useAuthGuard'
 
+// ─── Compiler ────────────────────────────────────────────
+async function runWithWandbox(code, lang, stdin = '') {
+  const compiler = lang === 'cpp' ? 'gcc-head' : 'gcc-head-c'
+  const res = await fetch('https://wandbox.org/api/compile.json', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      compiler, code, stdin,
+      options: lang === 'cpp' ? 'warning,c++17' : 'warning,c11',
+      'compiler-option-raw': lang === 'cpp' ? '-std=c++17' : '-std=c11',
+    }),
+  })
+  const data = await res.json()
+  const stderr = data?.compiler_error || data?.runtime_error || ''
+  const stdout = data?.program_output || ''
+  return { stdout, stderr, hasError: !!stderr && !stdout }
+}
+
+let pyodideInstance = null
+async function runPython(code, stdin = '') {
+  try {
+    if (!pyodideInstance) {
+      if (!window.loadPyodide) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js'
+          s.onload = resolve; s.onerror = reject
+          document.head.appendChild(s)
+        })
+      }
+      pyodideInstance = await window.loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/' })
+    }
+    let output = ''
+    pyodideInstance.setStdout({ batched: t => { output += t + '\n' } })
+    pyodideInstance.setStderr({ batched: t => { output += t + '\n' } })
+    await pyodideInstance.runPythonAsync(code)
+    return { stdout: output.trimEnd(), stderr: '', hasError: false }
+  } catch (err) {
+    return { stdout: '', stderr: err.message, hasError: true }
+  }
+}
+
+// ─── CodingLesson Component ───────────────────────────────
+function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast }) {
+  const cd = lesson.quiz_data?.[0] || {}
+  const { language = 'c', header = '', starter_code = '', code_cards = [], expected_output = '', note = '' } = cd
+
+  const [userCode, setUserCode] = useState(starter_code)
+  const [stdin, setStdin] = useState('')
+  const [output, setOutput] = useState('')
+  const [isRunning, setIsRunning] = useState(false)
+  const [hasError, setHasError] = useState(false)
+  const [passed, setPassed] = useState(false)
+  const [completed, setCompleted] = useState(false)
+
+  // ✅ Fix 1: return 0; এর আগে insert করো
+  const insertCard = (card) => {
+    setUserCode(prev => {
+      if (prev.includes('    return 0;')) {
+        return prev.replace('    return 0;', `    ${card.code}\n    return 0;`)
+      } else if (prev.includes('return 0;')) {
+        return prev.replace('return 0;', `${card.code}\n    return 0;`)
+      }
+      return prev + '\n    ' + card.code
+    })
+    addToast(`📎 "${card.label || card.code.slice(0, 20)}" যোগ হয়েছে`, 'info', 2000)
+  }
+
+  // ✅ Fix 2: Server-side compiler proxy ব্যবহার করো
+  const handleRun = async () => {
+    setIsRunning(true)
+    setOutput('')
+    setHasError(false)
+
+    try {
+      const fullCode = (header || '') + userCode
+
+      let result
+
+      if (language === 'python') {
+        // Python: client-side Pyodide
+        if (!pyodideInstance) {
+          if (!window.loadPyodide) {
+            await new Promise((resolve, reject) => {
+              const s = document.createElement('script')
+              s.src = 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js'
+              s.onload = resolve; s.onerror = reject
+              document.head.appendChild(s)
+            })
+          }
+          pyodideInstance = await window.loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/' })
+        }
+        let pyOutput = ''
+        pyodideInstance.setStdout({ batched: t => { pyOutput += t + '\n' } })
+        pyodideInstance.setStderr({ batched: t => { pyOutput += t + '\n' } })
+        try {
+          await pyodideInstance.runPythonAsync(fullCode)
+          result = { stdout: pyOutput.trimEnd(), stderr: '', hasError: false }
+        } catch (err) {
+          result = { stdout: '', stderr: err.message, hasError: true }
+        }
+      } else {
+        // C/C++: server-side proxy দিয়ে compile
+        const res = await fetch('/api/compile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: fullCode, language, stdin })
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          result = { stdout: '', stderr: data.error || 'Compiler error', hasError: true }
+        } else {
+          result = data
+        }
+      }
+
+      setHasError(result.hasError)
+      setOutput(result.stderr || result.stdout || '(No output)')
+
+      if (!result.hasError && result.stdout) {
+        const clean = s => s.trim().replace(/\r\n/g, '\n')
+        const isMatch = expected_output
+          ? clean(result.stdout) === clean(expected_output)
+          : true
+
+        if (isMatch && !passed) {
+          setPassed(true)
+          setCompleted(true)
+          onComplete()
+          addToast('🎉 সঠিক Output! Lesson সম্পন্ন!', 'success', 4000)
+        } else if (expected_output && !isMatch) {
+          addToast('❌ Output মিলেনি। Expected: ' + expected_output.trim(), 'error', 3000)
+        }
+      }
+    } catch (err) {
+      setHasError(true)
+      setOutput('❌ Error: ' + err.message)
+    } finally {
+      setIsRunning(false)
+    }
+  }
+
+  const langLabel = { c: 'C', cpp: 'C++', python: 'Python' }
+  const langColor = { c: '#3b82f6', cpp: '#8b5cf6', python: '#f59e0b' }
+  const color = langColor[language] || '#3b82f6'
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* Left Column */}
+        <div className="space-y-4">
+
+          {/* Code Cards */}
+          {code_cards.filter(c => c.label || c.code).length > 0 && (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+              <p className="text-gray-400 text-xs font-semibold mb-3 uppercase tracking-wider">
+                🃏 Code Cards — click করে editor-এ যোগ করুন
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {code_cards.filter(c => c.label || c.code).map((card, i) => (
+                  <div key={i} className="relative group">
+                    <button
+                      onClick={() => insertCard(card)}
+                      style={{ borderColor: color + '60', color }}
+                      className="bg-gray-800 border hover:scale-105 active:scale-95 px-3 py-2 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer">
+                      {card.label || card.code.slice(0, 20)}
+                    </button>
+                    {/* Hover tooltip — code দেখাবে */}
+                    {card.code && (
+                      <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 min-w-48 max-w-64">
+                        <div className="bg-gray-950 border border-gray-600 rounded-lg p-3 shadow-xl">
+                          <p className="text-gray-500 text-xs mb-1">💻 Code:</p>
+                          <pre style={{ color }}
+                            className="text-xs font-mono whitespace-pre-wrap">{card.code}</pre>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Editor */}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 bg-gray-800/50 border-b border-gray-700">
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
+                </div>
+                <span className="text-gray-500 text-xs font-semibold font-mono">
+                  💻 {langLabel[language]} Editor
+                </span>
+              </div>
+              <button onClick={() => { setUserCode(starter_code); setOutput(''); setPassed(false) }}
+                className="text-gray-500 hover:text-gray-300 text-xs transition">
+                🔄 Reset
+              </button>
+            </div>
+
+            {/* Header (read-only) */}
+            {header && (
+              <div className="px-4 pt-3 pb-1 bg-gray-950 border-b border-gray-800/50 select-none">
+                <pre className="text-blue-400/70 text-xs font-mono leading-relaxed">{header}</pre>
+              </div>
+            )}
+
+            {/* Editable area */}
+            <textarea
+              value={userCode}
+              onChange={e => setUserCode(e.target.value)}
+              spellCheck={false}
+              className="w-full bg-[#080c14] text-gray-200 font-mono text-sm px-4 py-3 outline-none resize-none border-none"
+              style={{ minHeight: '220px', lineHeight: '1.6' }}
+              placeholder="এখানে code লিখুন..."
+            />
+          </div>
+
+          {/* Note */}
+          {note && (
+            <div className="bg-yellow-900/20 border border-yellow-700/30 rounded-xl p-4">
+              <p className="text-yellow-400 text-xs font-semibold mb-2">📝 Note:</p>
+              <p className="text-gray-300 text-sm leading-relaxed">{note}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Right Column */}
+        <div className="space-y-4">
+
+          {/* Stdin */}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+            <p className="text-gray-400 text-xs font-semibold mb-2">📥 Standard Input (stdin)</p>
+            <textarea value={stdin} onChange={e => setStdin(e.target.value)} rows={3}
+              className="w-full bg-gray-950 text-gray-300 font-mono text-sm px-3 py-2 rounded-lg border border-gray-700 outline-none resize-none focus:border-blue-500 transition"
+              placeholder="প্রতি লাইনে একটি value..." />
+          </div>
+
+          {/* Run Button */}
+          <button onClick={handleRun} disabled={isRunning}
+            style={{ background: isRunning ? '#374151' : color }}
+            className="w-full py-3.5 disabled:cursor-not-allowed text-white font-bold rounded-xl transition flex items-center justify-center gap-2 text-sm">
+            {isRunning ? '⏳ Compiling...' : `▶ Run ${langLabel[language]}`}
+          </button>
+
+          {/* Output */}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden" style={{ minHeight: '200px' }}>
+            <div className="flex items-center justify-between px-4 py-2 bg-gray-800/50 border-b border-gray-700">
+              <span className="text-gray-400 text-xs font-semibold uppercase tracking-wider">📤 Output</span>
+              {output && (
+                <span className={`text-xs font-bold px-2 py-0.5 rounded ${hasError ? 'bg-red-900/30 text-red-400' : passed ? 'bg-green-900/30 text-green-400' : 'bg-gray-800 text-gray-400'}`}>
+                  {hasError ? '❌ Error' : passed ? '✅ Passed!' : '▶ Output'}
+                </span>
+              )}
+            </div>
+            <div className="p-4" style={{ minHeight: '160px' }}>
+              {output
+                ? <pre className={`text-sm font-mono whitespace-pre-wrap leading-relaxed ${hasError ? 'text-red-400' : 'text-green-300'}`}>{output}</pre>
+                : <p className="text-gray-600 text-sm text-center pt-12">Run করলে output দেখাবে</p>}
+            </div>
+          </div>
+
+          {/* Expected Output */}
+          {expected_output && (
+            <div className="bg-green-900/10 border border-green-700/20 rounded-xl p-4">
+              <p className="text-green-400 text-xs font-semibold mb-2">✅ Expected Output:</p>
+              <pre className="text-green-300 text-sm font-mono whitespace-pre-wrap">{expected_output}</pre>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ✅ Fix 3 & 4: Passed banner — Next + Certificate */}
+      {passed && (
+        <div className="bg-green-900/20 border border-green-700/40 rounded-xl p-6 text-center">
+          <div className="text-4xl mb-3">🎉</div>
+          <p className="text-green-400 font-bold text-lg mb-5">
+            Problem সমাধান হয়েছে! Lesson সম্পন্ন।
+          </p>
+          <div className="flex gap-3 justify-center flex-wrap">
+            <button
+              onClick={() => { setUserCode(starter_code); setOutput(''); setPassed(false) }}
+              className="bg-gray-700 hover:bg-gray-600 text-white px-5 py-2.5 rounded-xl text-sm transition">
+              🔄 আবার করুন
+            </button>
+
+            {/* Next Lesson */}
+            {onGoNext && (
+              <button onClick={onGoNext}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition">
+                পরের Lesson 🔓 →
+              </button>
+            )}
+
+            {/* Certificate — last lesson */}
+            {onCertificate && (
+              <button onClick={onCertificate}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition">
+                🎓 Certificate নিন!
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Main Component ───────────────────────────────────────
 export default function CourseDetail({ params }) {
-  useAuthGuard()
-  const { addToast } = useToast()
   const { id } = use(params)
+  const { addToast } = useToast()
+
   const [course, setCourse] = useState(null)
   const [lessons, setLessons] = useState([])
   const [loading, setLoading] = useState(true)
@@ -21,46 +332,44 @@ export default function CourseDetail({ params }) {
   const [quizResult, setQuizResult] = useState(null)
   const [dragAnswers, setDragAnswers] = useState({})
 
+  // Video controls
   const playerRef = useRef(null)
-  const playerContainerRef = useRef(null)
   const [speed, setSpeed] = useState(1)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playerReady, setPlayerReady] = useState(false)
 
   useEffect(() => {
-    // ── লগইন চেক (সবার আগে) ──────────────────
+    fetch('/api/courses').then(r => r.json()).then(data => {
+      setCourse((data.courses || []).find(c => c.id === id) || null)
+    })
+    fetch(`/api/lessons?courseId=${id}`).then(r => r.json()).then(data => {
+      setLessons(data.lessons || [])
+      setLoading(false)
+    })
     const savedUser = localStorage.getItem('user')
-    if (!savedUser) {
-      window.location.href = '/login'
-      return
-    }
-
-    fetch('/api/courses')
-      .then(res => res.json())
-      .then(data => {
-        const found = (data.courses || []).find(c => c.id === id)
-        setCourse(found || null)
-      })
-
-    fetch(`/api/lessons?courseId=${id}`)
-      .then(res => res.json())
-      .then(data => {
-        setLessons(data.lessons || [])
-        setLoading(false)
-      })
-
-    const u = JSON.parse(savedUser)
-    fetch(`/api/progress?userId=${u.id}&courseId=${id}`)
-      .then(res => res.json())
-      .then(data => {
+    if (savedUser) {
+      const u = JSON.parse(savedUser)
+      fetch(`/api/progress?userId=${u.id}&courseId=${id}`).then(r => r.json()).then(data => {
         if (data.progress > 0) {
-          const completed = []
-          for (let i = 0; i < data.progress; i++) completed.push(i)
-          setCompletedLessons(completed)
+          setCompletedLessons(Array.from({ length: data.progress }, (_, i) => i))
         }
       })
+    }
   }, [id])
 
+  // Tab reset when lesson changes
+  useEffect(() => {
+    if (lessons.length === 0) return
+    const cur = lessons[activeLesson]
+    setActiveTab(cur?.lesson_type === 'coding' ? 'quiz' : 'video')
+    setQuizState('idle')
+    setSelectedAnswers({})
+    setDragAnswers({})
+    setQuizResult(null)
+    setShowEndPopup(false)
+  }, [activeLesson, lessons.length])
+
+  // YouTube IFrame API
   useEffect(() => {
     if (!window.YT) {
       const tag = document.createElement('script')
@@ -73,59 +382,34 @@ export default function CourseDetail({ params }) {
     if (lessons.length === 0 || activeTab !== 'video') return
     const lesson = lessons[activeLesson]
     if (!lesson?.video_id) return
-
     setPlayerReady(false)
     setIsPlaying(false)
 
     const initPlayer = () => {
-      if (playerRef.current) {
-        playerRef.current.destroy()
-        playerRef.current = null
-      }
-
+      if (playerRef.current) { try { playerRef.current.destroy() } catch {} playerRef.current = null }
       playerRef.current = new window.YT.Player('yt-player', {
         videoId: lesson.video_id,
         playerVars: { rel: 0, modestbranding: 1 },
         events: {
-          onReady: (e) => {
-            setPlayerReady(true)
-            e.target.setPlaybackRate(speed)
-          },
-          onStateChange: (e) => {
-            setIsPlaying(e.data === window.YT.PlayerState.PLAYING)
-          }
+          onReady: e => { setPlayerReady(true); e.target.setPlaybackRate(speed) },
+          onStateChange: e => setIsPlaying(e.data === window.YT.PlayerState.PLAYING)
         }
       })
     }
 
-    if (window.YT && window.YT.Player) {
-      initPlayer()
-    } else {
-      window.onYouTubeIframeAPIReady = initPlayer
-    }
-
-    return () => {
-      if (playerRef.current) {
-        try { playerRef.current.destroy() } catch {}
-        playerRef.current = null
-      }
-    }
+    if (window.YT?.Player) initPlayer()
+    else window.onYouTubeIframeAPIReady = initPlayer
+    return () => { if (playerRef.current) { try { playerRef.current.destroy() } catch {} playerRef.current = null } }
   }, [activeLesson, lessons, activeTab])
 
   const togglePlay = () => {
     if (!playerRef.current) return
-    if (isPlaying) {
-      playerRef.current.pauseVideo()
-    } else {
-      playerRef.current.playVideo()
-    }
+    isPlaying ? playerRef.current.pauseVideo() : playerRef.current.playVideo()
   }
 
   const changeSpeed = (s) => {
     setSpeed(s)
-    if (playerRef.current && playerReady) {
-      playerRef.current.setPlaybackRate(s)
-    }
+    if (playerRef.current && playerReady) playerRef.current.setPlaybackRate(s)
   }
 
   const lesson = lessons[activeLesson]
@@ -143,7 +427,29 @@ export default function CourseDetail({ params }) {
     })
   }
 
-  const handleVideoEnd = () => setShowEndPopup(true)
+  const goToLesson = (i) => {
+    if (isLocked(i)) return
+    setActiveLesson(i)
+  }
+
+  const goNext = () => {
+    if (activeLesson < lessons.length - 1) goToLesson(activeLesson + 1)
+  }
+
+  const goPrev = () => {
+    if (activeLesson > 0) goToLesson(activeLesson - 1)
+  }
+
+  const handleVideoEnd = () => {
+    if (!lesson.quiz_data?.length || lesson.quiz_type === 'none') {
+      if (!completedLessons.includes(activeLesson)) {
+        setCompletedLessons([...completedLessons, activeLesson])
+        saveProgress(activeLesson)
+      }
+    } else {
+      setShowEndPopup(true)
+    }
+  }
 
   const startQuiz = () => {
     setShowEndPopup(false)
@@ -152,17 +458,6 @@ export default function CourseDetail({ params }) {
     setQuizResult(null)
     setQuizState('taking')
     setActiveTab('quiz')
-  }
-
-  const goToLesson = (i) => {
-    if (isLocked(i)) return
-    setActiveLesson(i)
-    setQuizState('idle')
-    setSelectedAnswers({})
-    setDragAnswers({})
-    setQuizResult(null)
-    setActiveTab('video')
-    setShowEndPopup(false)
   }
 
   const submitMCQ = () => {
@@ -177,28 +472,22 @@ export default function CourseDetail({ params }) {
     if (passed && !completedLessons.includes(activeLesson)) {
       setCompletedLessons([...completedLessons, activeLesson])
       saveProgress(activeLesson)
-      addToast(`✅ Lesson "${lesson.title}" সম্পন্ন!`, 'success')
+      addToast(`✅ Lesson সম্পন্ন!`, 'success')
+    }
 
+    if (score === 100) addToast('🎯 Perfect Score!', 'success', 5000)
+
+    if (passed && activeLesson === lessons.length - 1 && course) {
       const savedUser = localStorage.getItem('user')
       if (savedUser) {
         const u = JSON.parse(savedUser)
-        fetch(`/api/badges?userId=${u.id}`)
-          .then(r => r.json())
-          .then(data => {
-            const newBadges = (data.badges || []).filter(b => b.earned)
-            const prevCount = completedLessons.length === 0 ? 0 : undefined
-            if (prevCount === 0 && newBadges.some(b => b.id === 'first_code')) {
-              addToast('🔥 নতুন Badge অর্জন: First Code!', 'success', 5000)
-            }
-          })
-      }
-
-      if (score === 100) {
-        addToast('🎯 Perfect Score! Badge অর্জন করেছেন!', 'success', 5000)
-        const savedUser2 = localStorage.getItem('user')
-        if (savedUser2) {
-          const u = JSON.parse(savedUser2)
-          fetch(`/api/badges?userId=${u.id}`)
+        if ((course.coin_reward || 0) > 0) {
+          fetch('/api/coins', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: u.id, amount: course.coin_reward, type: 'course_complete', description: `course_${id}_completed` }) })
+          addToast(`🎓 কোর্স সম্পন্ন! +${course.coin_reward} 🪙`, 'coin', 5000)
+        }
+        if ((course.diamond_reward || 0) > 0) {
+          fetch('/api/coins', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: u.id, amount: course.diamond_reward, type: 'mission_complete', description: `course_${id}_diamond` }) })
+          addToast(`💎 +${course.diamond_reward} ডায়মন্ড!`, 'diamond', 5000)
         }
       }
     }
@@ -220,65 +509,41 @@ export default function CourseDetail({ params }) {
     if (passed && !completedLessons.includes(activeLesson)) {
       setCompletedLessons([...completedLessons, activeLesson])
       saveProgress(activeLesson)
-      addToast(`✅ Lesson "${lesson.title}" সম্পন্ন!`, 'success')
+      addToast(`✅ Lesson সম্পন্ন!`, 'success')
     }
   }
 
-  const goNext = () => {
-    if (activeLesson < lessons.length - 1) {
-      goToLesson(activeLesson + 1)
-    }
-  }
-
-  const goPrev = () => {
-    if (activeLesson > 0) {
-      goToLesson(activeLesson - 1)
-    }
-  }
-
-  if (loading) return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-      <div className="text-white">লোড হচ্ছে...</div>
-    </div>
-  )
+  if (loading) return <div className="min-h-screen bg-gray-950 flex items-center justify-center"><div className="text-white">লোড হচ্ছে...</div></div>
 
   if (!course || lessons.length === 0) return (
     <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-4">
-      <div className="text-white text-xl">কোর্সে এখনো কোনো lesson যোগ করা হয়নি</div>
-      <Link href="/courses" className="text-purple-400 hover:text-purple-300">← কোর্স তালিকায় ফিরুন</Link>
+      <div className="text-white text-xl">কোর্সে এখনো কোনো lesson নেই</div>
+      <Link href="/courses" className="text-purple-400">← কোর্স তালিকায় ফিরুন</Link>
     </div>
   )
+
+  const isCodingLesson = lesson.lesson_type === 'coding'
 
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col">
 
+      {/* End Popup */}
       {showEndPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backdropFilter: 'blur(8px)', background: 'rgba(0,0,0,0.75)' }}>
-          <div className="bg-gray-900 border border-gray-700 rounded-3xl p-10 max-w-lg w-full mx-4 text-center shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backdropFilter: 'blur(8px)', background: 'rgba(0,0,0,0.75)' }}>
+          <div className="bg-gray-900 border border-gray-700 rounded-3xl p-10 max-w-lg w-full mx-4 text-center">
             <div className="text-6xl mb-4">🎬</div>
             <h2 className="text-white font-black text-2xl mb-3">Lesson শেষ!</h2>
-            <p className="text-gray-400 mb-6 leading-relaxed">{lesson.title} সম্পর্কে শিখলেন।</p>
+            <p className="text-gray-400 mb-6">{lesson.title}</p>
             <div className="bg-gray-800 rounded-2xl p-4 mb-8 text-left">
               <h4 className="text-purple-400 font-bold text-sm mb-2 uppercase tracking-wider">
-                {lesson.quiz_type === 'mcq' ? '🧠 MCQ Quiz' : lesson.quiz_type === 'dropdown' ? '📋 Dropdown Problem' : '📝 Quiz নেই'}
+                {lesson.quiz_type === 'mcq' ? '🧠 MCQ Quiz' : '📋 Dropdown Problem'}
               </h4>
-              <p className="text-gray-300 text-sm">
-                {lesson.quiz_type === 'mcq'
-                  ? `${(lesson.quiz_data || []).length}টি MCQ প্রশ্নের উত্তর দিন। ৭০% পেলে পরের lesson unlock হবে।`
-                  : lesson.quiz_type === 'dropdown'
-                  ? `Dropdown সমস্যা সমাধান করুন। ৭০% পেলে পরের lesson unlock হবে।`
-                  : `এই lesson-এ কোনো Quiz নেই, সরাসরি পরের ধাপে যেতে পারবেন।`}
-              </p>
+              <p className="text-gray-300 text-sm">৭০% পেলে পরের lesson unlock হবে।</p>
             </div>
             <div className="flex gap-3 justify-center">
-              <button onClick={() => setShowEndPopup(false)}
-                className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-5 py-3 rounded-xl text-sm transition">
-                পরে করব
-              </button>
-              <button onClick={startQuiz}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-xl font-bold transition">
-                {lesson.quiz_type === 'mcq' ? '🧠 Quiz দিন' : lesson.quiz_type === 'dropdown' ? '📋 সমাধান করুন' : '➡️ পরবর্তী ধাপ'} →
+              <button onClick={() => setShowEndPopup(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-5 py-3 rounded-xl text-sm transition">পরে করব</button>
+              <button onClick={startQuiz} className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-xl font-bold transition">
+                {lesson.quiz_type === 'mcq' ? '🧠 Quiz দিন' : '📋 সমাধান করুন'} →
               </button>
             </div>
           </div>
@@ -287,48 +552,32 @@ export default function CourseDetail({ params }) {
 
       <div className="flex flex-1 overflow-hidden">
 
+        {/* Sidebar */}
         <div className="hidden md:flex flex-col w-72 bg-gray-900 border-r border-gray-800 overflow-y-auto flex-shrink-0">
           <div className={`bg-gradient-to-br ${course.color || 'from-purple-600 to-purple-800'} p-5`}>
             <div className="text-3xl mb-2">{course.icon}</div>
             <h2 className="text-white font-bold">{course.title}</h2>
-            <div className="text-white/70 text-sm mt-1">{course.level} · {course.duration}</div>
             <div className="mt-3 bg-white/20 rounded-full h-1.5 overflow-hidden">
               <div className="h-full bg-white rounded-full transition-all" style={{ width: `${progress}%` }} />
             </div>
             <div className="text-white/70 text-xs mt-1">{completedLessons.length}/{lessons.length} সম্পন্ন</div>
           </div>
-
           <div className="p-3">
             {lessons.map((l, i) => {
               const locked = isLocked(i)
               const completed = completedLessons.includes(i)
               return (
-                <button key={l.id}
-                  onClick={() => goToLesson(i)}
-                  disabled={locked}
-                  className={`w-full text-left px-3 py-3 rounded-xl transition flex items-center gap-3 mb-1 ${
-                    activeLesson === i ? 'bg-purple-600/20 border border-purple-600/40' :
-                    locked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-800'
-                  }`}>
-                  <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0 font-bold ${
-                    completed ? 'bg-green-600 text-white' :
-                    locked ? 'bg-gray-700 text-gray-600' :
-                    activeLesson === i ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-400'
-                  }`}>
-                    {completed ? '✓' : locked ? '🔒' : i + 1}
+                <button key={l.id} onClick={() => goToLesson(i)} disabled={locked}
+                  className={`w-full text-left px-3 py-3 rounded-xl transition flex items-center gap-3 mb-1 ${activeLesson === i ? 'bg-purple-600/20 border border-purple-600/40' : locked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-800'}`}>
+                  <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0 font-bold ${completed ? 'bg-green-600 text-white' : locked ? 'bg-gray-700 text-gray-600' : activeLesson === i ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-400'}`}>
+                    {completed ? '✓' : locked ? '🔒' : l.lesson_type === 'coding' ? '💻' : i + 1}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <div className={`text-sm font-medium truncate ${activeLesson === i ? 'text-white' : locked ? 'text-gray-600' : 'text-gray-400'}`}>
-                      {l.title}
-                    </div>
+                    <div className={`text-sm font-medium truncate ${activeLesson === i ? 'text-white' : locked ? 'text-gray-600' : 'text-gray-400'}`}>{l.title}</div>
                     <div className="text-xs text-gray-600 mt-0.5 flex items-center gap-2">
-                      <span>▶ {l.duration}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-xs ${
-                        l.quiz_type === 'mcq' ? 'bg-purple-900/40 text-purple-400' :
-                        l.quiz_type === 'dropdown' ? 'bg-blue-900/40 text-blue-400' :
-                        'bg-gray-800 text-gray-500'
-                      }`}>
-                        {l.quiz_type === 'mcq' ? 'MCQ' : l.quiz_type === 'dropdown' ? 'Dropdown' : 'Quiz নেই'}
+                      <span>{l.lesson_type === 'coding' ? '💻' : '▶'} {l.duration}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-xs ${l.lesson_type === 'coding' ? 'bg-blue-900/40 text-blue-400' : l.quiz_type === 'mcq' ? 'bg-purple-900/40 text-purple-400' : 'bg-blue-900/40 text-blue-400'}`}>
+                        {l.lesson_type === 'coding' ? 'Coding' : l.quiz_type === 'mcq' ? 'MCQ' : l.quiz_type === 'dropdown' ? 'Dropdown' : 'Video'}
                       </span>
                     </div>
                   </div>
@@ -338,14 +587,16 @@ export default function CourseDetail({ params }) {
           </div>
         </div>
 
+        {/* Main Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto px-6 py-8">
 
+            {/* Tabs */}
             <div className="flex gap-1 mb-6 bg-gray-900 border border-gray-800 rounded-xl p-1 w-fit">
               {[
-                { key: 'video', label: '▶ ভিডিও' },
-                { key: 'notes', label: '📝 নোটস' },
-                { key: 'quiz', label: lesson.quiz_type === 'mcq' ? '🧠 Quiz' : lesson.quiz_type === 'dropdown' ? '📋 সমস্যা' : '➡️ পরবর্তী' },
+                ...(!isCodingLesson ? [{ key: 'video', label: '▶ ভিডিও' }] : []),
+                ...(!isCodingLesson ? [{ key: 'notes', label: '📝 নোটস' }] : []),
+                { key: 'quiz', label: isCodingLesson ? '💻 Practice' : lesson.quiz_type === 'mcq' ? '🧠 Quiz' : '📋 সমস্যা' },
               ].map(tab => (
                 <button key={tab.key} onClick={() => setActiveTab(tab.key)}
                   className={`px-5 py-2 rounded-lg text-sm font-medium transition ${activeTab === tab.key ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-white'}`}>
@@ -359,96 +610,53 @@ export default function CourseDetail({ params }) {
               <h1 className="text-2xl font-bold text-white">{lesson.title}</h1>
             </div>
 
-            {activeTab === 'video' && (
+            {/* Video Tab */}
+            {activeTab === 'video' && !isCodingLesson && (
               <div>
                 {lesson.video_id ? (
                   <div>
                     <div className="rounded-2xl overflow-hidden bg-black mb-4 aspect-video">
                       <div id="yt-player" className="w-full h-full" />
                     </div>
-
                     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mb-4">
                       <div className="flex items-center justify-between flex-wrap gap-3">
-
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={goPrev}
-                            disabled={activeLesson === 0}
-                            className="flex items-center gap-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed text-gray-300 px-3 py-2 rounded-lg text-sm transition">
-                            ◀ আগের
-                          </button>
-
-                          <button
-                            onClick={togglePlay}
-                            disabled={!playerReady}
-                            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
+                          <button onClick={goPrev} disabled={activeLesson === 0} className="bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-gray-300 px-3 py-2 rounded-lg text-sm transition">◀ আগের</button>
+                          <button onClick={togglePlay} disabled={!playerReady} className="bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
                             {isPlaying ? '⏸ Pause' : '▶ Play'}
                           </button>
-
-                          <button
-                            onClick={() => { if (!isLocked(activeLesson + 1)) goToLesson(activeLesson + 1) }}
+                          <button onClick={() => { if (!isLocked(activeLesson + 1)) goToLesson(activeLesson + 1) }}
                             disabled={activeLesson === lessons.length - 1 || isLocked(activeLesson + 1)}
-                            className="flex items-center gap-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed text-gray-300 px-3 py-2 rounded-lg text-sm transition">
-                            পরের ▶
-                          </button>
+                            className="bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-gray-300 px-3 py-2 rounded-lg text-sm transition">পরের ▶</button>
                         </div>
-
                         <div className="flex items-center gap-2">
                           <span className="text-gray-400 text-xs">Speed:</span>
                           <div className="flex gap-1">
                             {[0.75, 1, 1.25, 1.5, 2].map(s => (
-                              <button
-                                key={s}
-                                onClick={() => changeSpeed(s)}
-                                className={`px-2 py-1 rounded-lg text-xs font-semibold transition ${
-                                  speed === s
-                                    ? 'bg-purple-600 text-white'
-                                    : 'bg-gray-800 text-gray-400 hover:text-white'
-                                }`}>
+                              <button key={s} onClick={() => changeSpeed(s)}
+                                className={`px-2 py-1 rounded-lg text-xs font-semibold transition ${speed === s ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
                                 {s}x
                               </button>
                             ))}
                           </div>
                         </div>
-
-                        <button onClick={handleVideoEnd}
-                          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">
-                          ✅ ভিডিও শেষ
-                        </button>
+                        <button onClick={handleVideoEnd} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">✅ ভিডিও শেষ</button>
                       </div>
                     </div>
                   </div>
                 ) : (
                   <div>
                     <div className="rounded-2xl bg-gray-900 border border-gray-800 mb-4 aspect-video flex items-center justify-center">
-                      <div className="text-gray-500 text-center">
-                        <div className="text-4xl mb-2">🎬</div>
-                        <div>এই lesson-এ কোনো video নেই</div>
-                      </div>
+                      <div className="text-gray-500 text-center"><div className="text-4xl mb-2">🎬</div><div>এই lesson-এ কোনো video নেই</div></div>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <div className="flex gap-2">
-                        <button onClick={goPrev} disabled={activeLesson === 0}
-                          className="bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-gray-300 px-4 py-2 rounded-xl text-sm transition">
-                          ◀ আগের
-                        </button>
-                        <button onClick={() => { if (!isLocked(activeLesson + 1)) goToLesson(activeLesson + 1) }}
-                          disabled={activeLesson === lessons.length - 1 || isLocked(activeLesson + 1)}
-                          className="bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-gray-300 px-4 py-2 rounded-xl text-sm transition">
-                          পরের ▶
-                        </button>
-                      </div>
-                      <button onClick={handleVideoEnd}
-                        className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition">
-                        ✅ পরের ধাপ
-                      </button>
-                    </div>
+                    <button onClick={handleVideoEnd} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition">✅ পরের ধাপ</button>
                   </div>
                 )}
               </div>
             )}
 
-            {activeTab === 'notes' && (
+            {/* Notes Tab */}
+            {activeTab === 'notes' && !isCodingLesson && (
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 mb-6">
                 {lesson.content ? (
                   <ReactMarkdown components={{
@@ -456,7 +664,6 @@ export default function CourseDetail({ params }) {
                     h2: ({children}) => <h2 className="text-xl font-bold text-white mb-3 mt-6">{children}</h2>,
                     p: ({children}) => <p className="text-gray-300 mb-4 leading-relaxed">{children}</p>,
                     ul: ({children}) => <ul className="list-disc list-inside mb-4 text-gray-300 space-y-1">{children}</ul>,
-                    ol: ({children}) => <ol className="list-decimal list-inside mb-4 text-gray-300 space-y-1">{children}</ol>,
                     li: ({children}) => <li className="text-gray-300">{children}</li>,
                     strong: ({children}) => <strong className="text-white font-semibold">{children}</strong>,
                     code: ({children}) => <code className="bg-gray-800 text-purple-300 px-2 py-1 rounded text-sm font-mono">{children}</code>,
@@ -467,204 +674,210 @@ export default function CourseDetail({ params }) {
                 ) : (
                   <div className="text-gray-500 text-center py-8">এই lesson-এর কোনো নোট নেই</div>
                 )}
-            
-                {/* Homework */}
+
                 {lesson.homework && (
                   <div className="mt-6 bg-yellow-900/20 border border-yellow-700/30 rounded-xl p-5">
                     <h3 className="text-yellow-400 font-bold text-sm mb-3 uppercase tracking-wider">📝 Homework</h3>
                     <p className="text-gray-300 text-sm whitespace-pre-wrap leading-relaxed">{lesson.homework}</p>
                   </div>
                 )}
-            
-                {/* Resources */}
-                {lesson.resources && lesson.resources.length > 0 && (
+
+                {lesson.resources?.length > 0 && (
                   <div className="mt-4 bg-gray-800/50 border border-gray-700 rounded-xl p-5">
                     <h3 className="text-blue-400 font-bold text-sm mb-3 uppercase tracking-wider">📎 Resources</h3>
                     <div className="space-y-2">
-                      {lesson.resources.map((r, i) => {
-                        const icon = r.type === 'link' ? '🔗' : r.type?.includes('pdf') ? '📄' : r.type?.includes('image') ? '🖼️' : '📎'
-                        return (
-                          <a key={i} href={r.url} target="_blank" rel="noreferrer"
-                            className="flex items-center gap-3 p-3 bg-gray-900 hover:bg-gray-800 border border-gray-700 hover:border-blue-600 rounded-lg transition">
-                            <span className="text-xl">{icon}</span>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-white font-medium text-sm truncate">{r.name}</div>
-                              {r.size && <div className="text-gray-500 text-xs">{(r.size / 1024).toFixed(1)} KB</div>}
-                            </div>
-                            <span className="text-blue-400 text-xs flex-shrink-0">Download →</span>
-                          </a>
-                        )
-                      })}
+                      {lesson.resources.map((r, i) => (
+                        <a key={i} href={r.url} target="_blank" rel="noreferrer"
+                          className="flex items-center gap-3 p-3 bg-gray-900 hover:bg-gray-800 border border-gray-700 hover:border-blue-600 rounded-lg transition">
+                          <span className="text-xl">{r.type === 'link' ? '🔗' : r.type?.includes('pdf') ? '📄' : '📎'}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-white font-medium text-sm truncate">{r.name}</div>
+                            {r.size && <div className="text-gray-500 text-xs">{(r.size / 1024).toFixed(1)} KB</div>}
+                          </div>
+                          <span className="text-blue-400 text-xs flex-shrink-0">Download →</span>
+                        </a>
+                      ))}
                     </div>
                   </div>
                 )}
-            
-                <button onClick={handleVideoEnd} className="mt-4 bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition">
-                  {lesson.quiz_type === 'mcq' ? '🧠 Quiz দিন' : lesson.quiz_type === 'dropdown' ? '📋 সমাধান করুন' : '➡️ পরবর্তী ধাপ'} →
+
+                <button onClick={handleVideoEnd} className="mt-6 bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition">
+                  {lesson.quiz_type === 'mcq' ? '🧠 Quiz দিন' : '📋 সমাধান করুন'} →
                 </button>
               </div>
             )}
 
+            {/* Quiz Tab */}
             {activeTab === 'quiz' && (
               <div>
-                {quizState === 'idle' && (
-                  <div className="bg-gray-900 border border-gray-800 rounded-2xl p-10 text-center">
-                    {(lesson.quiz_data || []).length === 0 ? (
-                      <div>
-                        <div className="text-6xl mb-4">📝</div>
-                        <h2 className="text-white font-bold text-2xl mb-3">এই lesson-এ কোনো Quiz নেই</h2>
-                        <p className="text-gray-400 mb-8">ভিডিও দেখুন এবং পরের lesson-এ যান।</p>
-                        <div className="flex gap-3 justify-center">
-                          <button onClick={() => setActiveTab('video')}
-                            className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-xl transition">
-                            ← ভিডিও দেখুন
-                          </button>
-                          {activeLesson < lessons.length - 1 && (
-                            <button onClick={() => {
-                              if (!completedLessons.includes(activeLesson)) {
-                                setCompletedLessons([...completedLessons, activeLesson])
-                                saveProgress(activeLesson)
-                              }
-                              goNext()
-                            }}
-                              className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-bold transition">
-                              পরের lesson 🔓 →
-                            </button>
-                          )}
-                          {activeLesson === lessons.length - 1 && (
-                            <Link href={`/certificate?course=${course.title}&id=${id}`}
-                              onClick={() => {
-                                if (!completedLessons.includes(activeLesson)) {
-                                  setCompletedLessons([...completedLessons, activeLesson])
-                                  saveProgress(activeLesson)
-                                }
-                              }}
-                              className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-bold transition">
-                              🎓 Certificate নিন!
-                            </Link>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="text-6xl mb-4">{lesson.quiz_type === 'mcq' ? '🧠' : '📋'}</div>
-                        <h2 className="text-white font-bold text-2xl mb-3">{lesson.quiz_type === 'mcq' ? 'MCQ Quiz' : 'Dropdown Problem'}</h2>
-                        <p className="text-gray-400 mb-8">আগে ভিডিও দেখুন, তারপর quiz দিন।</p>
-                        <button onClick={() => setActiveTab('video')} className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-xl transition mr-3">← ভিডিও দেখুন</button>
-                        <button onClick={startQuiz} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-bold transition">শুরু করুন →</button>
+                {/* Coding Lesson */}
+                {isCodingLesson ? (
+                  <CodingLesson
+                    lesson={lesson}
+                    addToast={addToast}
+                    onComplete={() => {
+                      if (!completedLessons.includes(activeLesson)) {
+                        const updated = [...completedLessons, activeLesson]
+                        setCompletedLessons(updated)
+                        saveProgress(activeLesson)
+                        if (activeLesson === lessons.length - 1 && course) {
+                          const savedUser = localStorage.getItem('user')
+                          if (savedUser) {
+                            const u = JSON.parse(savedUser)
+                            if ((course.coin_reward || 0) > 0) {
+                              fetch('/api/coins', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: u.id, amount: course.coin_reward, type: 'course_complete', description: `course_${id}_completed` }) })
+                              addToast(`🎓 কোর্স সম্পন্ন! +${course.coin_reward} 🪙`, 'coin', 5000)
+                            }
+                            if ((course.diamond_reward || 0) > 0) {
+                              fetch('/api/coins', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: u.id, amount: course.diamond_reward, type: 'mission_complete', description: `course_${id}_diamond` }) })
+                              addToast(`💎 +${course.diamond_reward} ডায়মন্ড!`, 'diamond', 5000)
+                            }
+                          }
+                        }
+                      }
+                    }}
+                    onGoNext={activeLesson < lessons.length - 1 ? goNext : null}
+                    onCertificate={activeLesson === lessons.length - 1
+                      ? () => window.location.href = `/certificate?course=${encodeURIComponent(course.title)}&id=${id}`
+                      : null}
+                  />
+                ) : (
+                  <>
+                    {/* Idle */}
+                    {quizState === 'idle' && (
+                      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-10 text-center">
+                        {!(lesson.quiz_data?.length) || lesson.quiz_type === 'none' ? (
+                          <div>
+                            <div className="text-6xl mb-4">📝</div>
+                            <h2 className="text-white font-bold text-2xl mb-3">এই lesson-এ কোনো Quiz নেই</h2>
+                            <div className="flex gap-3 justify-center mt-6">
+                              <button onClick={() => setActiveTab('video')} className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-xl transition">← ভিডিও দেখুন</button>
+                              {activeLesson < lessons.length - 1 && (
+                                <button onClick={() => {
+                                  if (!completedLessons.includes(activeLesson)) {
+                                    setCompletedLessons([...completedLessons, activeLesson])
+                                    saveProgress(activeLesson)
+                                  }
+                                  goNext()
+                                }} className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-bold transition">পরের lesson 🔓 →</button>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="text-6xl mb-4">{lesson.quiz_type === 'mcq' ? '🧠' : '📋'}</div>
+                            <h2 className="text-white font-bold text-2xl mb-3">{lesson.quiz_type === 'mcq' ? 'MCQ Quiz' : 'Dropdown Problem'}</h2>
+                            <p className="text-gray-400 mb-8">আগে ভিডিও দেখুন, তারপর quiz দিন।</p>
+                            <button onClick={() => setActiveTab('video')} className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-xl transition mr-3">← ভিডিও দেখুন</button>
+                            <button onClick={startQuiz} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-bold transition">শুরু করুন →</button>
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
 
-                {quizState === 'taking' && lesson.quiz_type === 'mcq' && (
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-white font-bold text-xl">MCQ Quiz</h2>
-                      <span className="text-gray-400 text-sm bg-gray-800 px-3 py-1 rounded-full">{Object.keys(selectedAnswers).length}/{(lesson.quiz_data || []).length} উত্তর</span>
-                    </div>
-                    {(lesson.quiz_data || []).map((q, qi) => (
-                      <div key={qi} className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-                        <p className="text-white font-semibold text-lg mb-4">
-                          <span className="text-purple-400 mr-2">{qi + 1}.</span>{q.question}
-                        </p>
-
-                        {/* Code Block */}
-                        {q.code && (
-                          <div className="mb-4 bg-gray-950 border border-gray-700 rounded-xl p-4 overflow-x-auto">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-gray-500 text-xs">💻 Code</span>
+                    {/* MCQ Taking */}
+                    {quizState === 'taking' && lesson.quiz_type === 'mcq' && (
+                      <div className="space-y-6">
+                        <div className="flex items-center justify-between">
+                          <h2 className="text-white font-bold text-xl">MCQ Quiz</h2>
+                          <span className="text-gray-400 text-sm bg-gray-800 px-3 py-1 rounded-full">{Object.keys(selectedAnswers).length}/{(lesson.quiz_data || []).length} উত্তর</span>
+                        </div>
+                        {(lesson.quiz_data || []).map((q, qi) => (
+                          <div key={qi} className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+                            <p className="text-white font-semibold text-lg mb-3"><span className="text-purple-400 mr-2">{qi + 1}.</span>{q.question}</p>
+                            {q.code && (
+                              <div className="mb-4 bg-gray-950 border border-gray-700 rounded-xl p-4 overflow-x-auto">
+                                <p className="text-gray-500 text-xs mb-2">💻 Code:</p>
+                                <pre className="text-blue-300 text-sm font-mono whitespace-pre-wrap">{q.code}</pre>
+                              </div>
+                            )}
+                            <div className="space-y-3">
+                              {(q.options || []).map((opt, oi) => (
+                                <button key={oi} onClick={() => setSelectedAnswers({ ...selectedAnswers, [qi]: oi })}
+                                  className={`w-full text-left px-5 py-3 rounded-xl border transition ${selectedAnswers[qi] === oi ? 'bg-purple-600/20 border-purple-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500'}`}>
+                                  <span className="text-gray-500 mr-3">{['A', 'B', 'C', 'D'][oi]}.</span>{opt}
+                                </button>
+                              ))}
                             </div>
-                            <pre className="text-blue-300 text-sm font-mono whitespace-pre-wrap">{q.code}</pre>
+                          </div>
+                        ))}
+                        <button onClick={submitMCQ} disabled={Object.keys(selectedAnswers).length < (lesson.quiz_data || []).length}
+                          className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white py-4 rounded-xl font-bold text-lg transition">
+                          {Object.keys(selectedAnswers).length < (lesson.quiz_data || []).length ? `${(lesson.quiz_data || []).length - Object.keys(selectedAnswers).length}টি প্রশ্ন বাকি` : '✓ Submit করুন'}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Dropdown Taking */}
+                    {quizState === 'taking' && lesson.quiz_type === 'dropdown' && (
+                      <div className="space-y-6">
+                        <h2 className="text-white font-bold text-xl">📋 Dropdown Problem</h2>
+                        {(lesson.quiz_data || []).map((dd, di) => (
+                          <div key={di} className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
+                            <p className="text-white font-semibold text-lg mb-6"><span className="text-blue-400 mr-2">{di + 1}.</span>{dd.question}</p>
+                            <div className="space-y-4">
+                              {(dd.steps || []).map((step, si) => (
+                                <div key={si} className="flex items-center gap-4">
+                                  <span className="text-gray-400 text-sm w-32 flex-shrink-0">{step.label}:</span>
+                                  <select value={dragAnswers[`${di}-${si}`] ?? ''} onChange={e => setDragAnswers({ ...dragAnswers, [`${di}-${si}`]: parseInt(e.target.value) })}
+                                    className="flex-1 bg-gray-800 border border-gray-700 text-white px-4 py-3 rounded-xl outline-none focus:border-blue-500 transition">
+                                    <option value="">-- বেছে নিন --</option>
+                                    {(step.options || []).map((opt, oi) => <option key={oi} value={oi}>{opt}</option>)}
+                                  </select>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                        <button onClick={submitDropdown} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold text-lg transition">✓ Submit করুন</button>
+                      </div>
+                    )}
+
+                    {/* Result */}
+                    {(quizState === 'passed' || quizState === 'failed') && quizResult && (
+                      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-10 text-center">
+                        <div className="text-6xl mb-4">{quizResult.passed ? '🎉' : '😔'}</div>
+                        <h2 className="text-white font-bold text-2xl mb-2">{quizResult.passed ? 'পাস করেছেন!' : 'আবার চেষ্টা করুন'}</h2>
+                        <div className={`text-5xl font-black mb-2 ${quizResult.passed ? 'text-green-400' : 'text-red-400'}`}>{quizResult.score}%</div>
+                        <p className="text-gray-400 mb-8">{quizResult.total} এর মধ্যে {quizResult.correct}টি সঠিক</p>
+
+                        {lesson.quiz_type === 'mcq' && (
+                          <div className="text-left space-y-3 mb-8">
+                            {(lesson.quiz_data || []).map((q, qi) => {
+                              const isCorrect = selectedAnswers[qi] === q.correct
+                              return (
+                                <div key={qi} className={`p-4 rounded-xl border ${isCorrect ? 'bg-green-900/20 border-green-700/40' : 'bg-red-900/20 border-red-700/40'}`}>
+                                  <p className="text-white font-medium mb-2">{qi + 1}. {q.question}</p>
+                                  {q.code && <pre className="text-blue-300 text-xs font-mono bg-gray-950 p-2 rounded mb-2">{q.code}</pre>}
+                                  <p className={`text-sm ${isCorrect ? 'text-green-400' : 'text-red-400'}`}>
+                                    {isCorrect ? '✓ সঠিক' : `✗ আপনার: ${q.options?.[selectedAnswers[qi]] || '-'}`}
+                                    {!isCorrect && <span className="text-green-400 ml-3">✓ সঠিক: {q.options?.[q.correct]}</span>}
+                                  </p>
+                                  {q.explanation && (
+                                    <div className="mt-2 bg-blue-900/20 border border-blue-700/30 rounded-lg p-3">
+                                      <p className="text-blue-400 text-xs font-semibold mb-1">💡 ব্যাখ্যা:</p>
+                                      <p className="text-gray-300 text-sm whitespace-pre-wrap">{q.explanation}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
                           </div>
                         )}
 
-                        <div className="space-y-3">
-                          {(q.options || []).map((opt, oi) => (
-                            <button key={oi} onClick={() => setSelectedAnswers({ ...selectedAnswers, [qi]: oi })}
-                              className={`w-full text-left px-5 py-3 rounded-xl border transition ${selectedAnswers[qi] === oi ? 'bg-purple-600/20 border-purple-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500'}`}>
-                              <span className="text-gray-500 mr-3">{['A', 'B', 'C', 'D'][oi]}.</span>{opt}
-                            </button>
-                          ))}
+                        <div className="flex gap-4 justify-center">
+                          <button onClick={() => { setQuizState('taking'); setSelectedAnswers({}); setDragAnswers({}) }}
+                            className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-xl font-semibold transition">🔄 আবার চেষ্টা</button>
+                          {quizResult.passed && activeLesson < lessons.length - 1 && (
+                            <button onClick={goNext} className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-semibold transition">পরের lesson 🔓 →</button>
+                          )}
+                          {quizResult.passed && activeLesson === lessons.length - 1 && (
+                            <Link href={`/certificate?course=${course.title}&id=${id}`} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition">🎓 Certificate নিন!</Link>
+                          )}
                         </div>
-                      </div>
-                    ))}
-                    <button onClick={submitMCQ} disabled={Object.keys(selectedAnswers).length < (lesson.quiz_data || []).length}
-                      className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white py-4 rounded-xl font-bold text-lg transition">
-                      {Object.keys(selectedAnswers).length < (lesson.quiz_data || []).length ? `${(lesson.quiz_data || []).length - Object.keys(selectedAnswers).length}টি প্রশ্ন বাকি` : '✓ Submit করুন'}
-                    </button>
-                  </div>
-                )}
-
-                {quizState === 'taking' && lesson.quiz_type === 'dropdown' && (
-                  <div className="space-y-6">
-                    <h2 className="text-white font-bold text-xl">📋 Dropdown Problem</h2>
-                    {(lesson.quiz_data || []).map((dd, di) => (
-                      <div key={di} className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-                        <p className="text-white font-semibold text-lg mb-6"><span className="text-blue-400 mr-2">{di + 1}.</span>{dd.question}</p>
-                        <div className="space-y-4">
-                          {(dd.steps || []).map((step, si) => (
-                            <div key={si} className="flex items-center gap-4">
-                              <span className="text-gray-400 text-sm w-32 flex-shrink-0">{step.label}:</span>
-                              <select value={dragAnswers[`${di}-${si}`] ?? ''} onChange={e => setDragAnswers({ ...dragAnswers, [`${di}-${si}`]: parseInt(e.target.value) })}
-                                className="flex-1 bg-gray-800 border border-gray-700 text-white px-4 py-3 rounded-xl outline-none focus:border-blue-500 transition">
-                                <option value="">-- বেছে নিন --</option>
-                                {(step.options || []).map((opt, oi) => <option key={oi} value={oi}>{opt}</option>)}
-                              </select>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                    <button onClick={submitDropdown} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold text-lg transition">✓ Submit করুন</button>
-                  </div>
-                )}
-
-                {(quizState === 'passed' || quizState === 'failed') && quizResult && (
-                  <div className="bg-gray-900 border border-gray-800 rounded-2xl p-10 text-center">
-                    <div className="text-6xl mb-4">{quizResult.passed ? '🎉' : '😔'}</div>
-                    <h2 className="text-white font-bold text-2xl mb-2">{quizResult.passed ? 'অভিনন্দন! পাস করেছেন!' : 'আবার চেষ্টা করুন'}</h2>
-                    <div className={`text-5xl font-black mb-2 ${quizResult.passed ? 'text-green-400' : 'text-red-400'}`}>{quizResult.score}%</div>
-                    <p className="text-gray-400 mb-8">{quizResult.total} এর মধ্যে {quizResult.correct}টি সঠিক</p>
-
-                    {lesson.quiz_type === 'mcq' && (
-                      <div className="text-left space-y-3 mb-8">
-                        {(lesson.quiz_data || []).map((q, qi) => {
-                          const isCorrect = selectedAnswers[qi] === q.correct
-                          return (
-                            <div key={qi} className={`p-4 rounded-xl border ${isCorrect ? 'bg-green-900/20 border-green-700/40' : 'bg-red-900/20 border-red-700/40'}`}>
-                              <p className="text-white font-medium mb-2">{qi + 1}. {q.question}</p>
-                              <p className={`text-sm mb-1 ${isCorrect ? 'text-green-400' : 'text-red-400'}`}>
-                                {isCorrect ? '✓ সঠিক উত্তর দিয়েছেন' : `✗ আপনার উত্তর: ${q.options?.[selectedAnswers[qi]] || '-'}`}
-                              </p>
-                              {!isCorrect && (
-                                <p className="text-green-400 text-sm mb-2">
-                                  ✓ সঠিক উত্তর: {q.options?.[q.correct]}
-                                </p>
-                              )}
-                              {q.explanation && (
-                                <div className="mt-2 bg-blue-900/20 border border-blue-700/30 rounded-lg p-3">
-                                  <p className="text-blue-400 text-xs font-semibold mb-1">💡 ব্যাখ্যা:</p>
-                                  <p className="text-gray-300 text-sm whitespace-pre-wrap">{q.explanation}</p>
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
                       </div>
                     )}
-
-                    <div className="flex gap-4 justify-center">
-                      <button onClick={() => { setQuizState('taking'); setSelectedAnswers({}); setDragAnswers({}) }}
-                        className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-xl font-semibold transition">🔄 আবার চেষ্টা</button>
-                      {quizResult.passed && activeLesson < lessons.length - 1 && (
-                        <button onClick={goNext} className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-semibold transition">পরের lesson 🔓 →</button>
-                      )}
-                      {quizResult.passed && activeLesson === lessons.length - 1 && (
-                        <Link href={`/certificate?course=${course.title}&id=${id}`} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition">🎓 Certificate নিন!</Link>
-                      )}
-                    </div>
-                  </div>
+                  </>
                 )}
               </div>
             )}
