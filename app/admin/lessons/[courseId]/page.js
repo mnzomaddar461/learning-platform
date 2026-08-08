@@ -7,6 +7,7 @@ function ResourceUploader({ lessonId, resources, onAdd, onRemove, inputStyle, la
   const [uploading, setUploading] = useState(false)
   const [linkForm, setLinkForm] = useState({ name: '', url: '' })
   const [showLinkForm, setShowLinkForm] = useState(false)
+  const [videoUploading, setVideoUploading] = useState(false)
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0]
@@ -90,6 +91,8 @@ export default function LessonManager({ params }) {
   const [saving, setSaving] = useState(false)
 
   const emptyForm = {
+    video_url: '',
+    timestamp_quizzes: [],
     title: '',
     lesson_type: 'video',
     video_id: '', content: '', duration: '10 মিনিট',
@@ -98,6 +101,7 @@ export default function LessonManager({ params }) {
     resources: [], homework: ''
   }
   const [form, setForm] = useState(emptyForm)
+  const [videoUploading, setVideoUploading] = useState(false)
 
   useEffect(() => {
     fetch('/api/admin/courses')
@@ -121,6 +125,8 @@ export default function LessonManager({ params }) {
   const openEditModal = (lesson) => {
     setEditingLesson(lesson)
     setForm({
+      video_url: lesson.video_url || '',
+      timestamp_quizzes: lesson.timestamp_quizzes || [],
       title: lesson.title || '',
       lesson_type: lesson.lesson_type || 'video',
       video_id: lesson.video_id || '',
@@ -514,6 +520,117 @@ export default function LessonManager({ params }) {
                   </div>
                 </>
               )}
+
+              {/* Video Upload */}
+                  <div>
+                    <label style={labelStyle}>🎬 Video Upload (Self-hosted)</label>
+                    {form.video_url && (
+                      <div style={{ background: '#0d2818', border: '1px solid #3fb95044', borderRadius: '8px', padding: '10px 14px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ color: '#3fb950', fontSize: '13px' }}>✅ Video uploaded</span>
+                        <a href={form.video_url} target="_blank" rel="noreferrer"
+                          style={{ color: '#58a6ff', fontSize: '12px' }}>দেখুন →</a>
+                        <button onClick={() => setForm({ ...form, video_url: '' })}
+                          style={{ background: 'none', border: 'none', color: '#f78166', cursor: 'pointer', fontSize: '12px', marginLeft: 'auto' }}>
+                          ✕ সরান
+                        </button>
+                      </div>
+                    )}
+                    <label style={{ background: '#0a1628', border: '1px solid #58a6ff44', color: '#58a6ff', padding: '10px 16px', borderRadius: '8px', cursor: videoUploading ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: '600', display: 'inline-block', opacity: videoUploading ? 0.5 : 1 }}>
+                      {videoUploading ? '⏳ Upload হচ্ছে...' : '📤 Video Upload করুন'}
+                      <input type="file" accept="video/*" disabled={videoUploading}
+                        onChange={async (e) => {
+                          const file = e.target.files[0]
+                          if (!file) return
+                          if (file.size > 500 * 1024 * 1024) {
+                            alert('File size 500MB এর বেশি হতে পারবে না')
+                            return
+                          }
+                          setVideoUploading(true)
+                          try {
+                            const fd = new FormData()
+                            fd.append('file', file)
+                            fd.append('lessonId', editingLesson?.id || 'new_' + Date.now())
+                            const res = await fetch('/api/admin/upload-video', { method: 'POST', body: fd })
+                            const data = await res.json()
+                            if (!res.ok) { alert('Upload error: ' + data.error); return }
+                            setForm(prev => ({ ...prev, video_url: data.url }))
+                          } catch { alert('Upload failed') }
+                          finally { setVideoUploading(false); e.target.value = '' }
+                        }}
+                        style={{ display: 'none' }} />
+                    </label>
+                    <p style={{ color: '#484f58', fontSize: '11px', marginTop: '6px' }}>Max 500MB. MP4, WebM, MOV সাপোর্টেড। YouTube ID দিলে সেটাই priority পাবে।</p>
+                  </div>
+
+                  {/* Timestamp Quizzes */}
+                  <div style={{ background: '#0d1117', borderRadius: '10px', padding: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <label style={{ ...labelStyle, color: '#f0c000', margin: 0 }}>⏱ Timestamp MCQ ({form.timestamp_quizzes?.length || 0} টি)</label>
+                      <button onClick={() => setForm(prev => ({
+                        ...prev,
+                        timestamp_quizzes: [...(prev.timestamp_quizzes || []), {
+                          id: Date.now().toString(),
+                          timestamp: '',
+                          question: '',
+                          options: ['', '', '', ''],
+                          correct: 0
+                        }]
+                      }))} style={{ background: '#1a1000', border: '1px solid #f0c00044', color: '#f0c000', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>
+                        + MCQ যোগ করুন
+                      </button>
+                    </div>
+
+                    {(form.timestamp_quizzes || []).map((tq, ti) => (
+                      <div key={tq.id || ti} style={{ background: '#161b22', borderRadius: '8px', padding: '14px', marginBottom: '10px', border: '1px solid #f0c00020' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                          <label style={{ ...labelStyle, margin: 0, color: '#f0c000' }}>MCQ {ti + 1}</label>
+                          <button onClick={() => setForm(prev => ({
+                            ...prev,
+                            timestamp_quizzes: prev.timestamp_quizzes.filter((_, i) => i !== ti)
+                          }))} style={{ background: '#2a0a00', border: '1px solid #f7816644', color: '#f78166', padding: '2px 8px', borderRadius: '6px', cursor: 'pointer', fontSize: '11px' }}>
+                            ✕
+                          </button>
+                        </div>
+
+                        <div style={{ marginBottom: '10px' }}>
+                          <label style={labelStyle}>⏱ Timestamp (মিনিট:সেকেন্ড — যেমন: 5:30)</label>
+                          <input value={tq.timestamp} onChange={e => {
+                            const updated = [...form.timestamp_quizzes]
+                            updated[ti] = { ...updated[ti], timestamp: e.target.value }
+                            setForm({ ...form, timestamp_quizzes: updated })
+                          }} style={inputStyle} placeholder="5:30" />
+                        </div>
+
+                        <div style={{ marginBottom: '10px' }}>
+                          <label style={labelStyle}>প্রশ্ন</label>
+                          <input value={tq.question} onChange={e => {
+                            const updated = [...form.timestamp_quizzes]
+                            updated[ti] = { ...updated[ti], question: e.target.value }
+                            setForm({ ...form, timestamp_quizzes: updated })
+                          }} style={inputStyle} placeholder="প্রশ্ন লিখুন..." />
+                        </div>
+
+                        {tq.options.map((opt, oi) => (
+                          <div key={oi} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                            <input type="radio" name={`tq-correct-${ti}`} checked={tq.correct === oi}
+                              onChange={() => {
+                                const updated = [...form.timestamp_quizzes]
+                                updated[ti] = { ...updated[ti], correct: oi }
+                                setForm({ ...form, timestamp_quizzes: updated })
+                              }} style={{ cursor: 'pointer', accentColor: '#3fb950' }} />
+                            <input value={opt} onChange={e => {
+                              const updated = [...form.timestamp_quizzes]
+                              const opts = [...updated[ti].options]
+                              opts[oi] = e.target.value
+                              updated[ti] = { ...updated[ti], options: opts }
+                              setForm({ ...form, timestamp_quizzes: updated })
+                            }} style={inputStyle} placeholder={`Option ${['A','B','C','D'][oi]}`} />
+                          </div>
+                        ))}
+                        <p style={{ color: '#484f58', fontSize: '11px', marginTop: '6px' }}>✓ চিহ্নিত option সঠিক উত্তর</p>
+                      </div>
+                    ))}
+                  </div>
 
               {/* ── CODING LESSON FIELDS ── */}
               {form.lesson_type === 'coding' && (

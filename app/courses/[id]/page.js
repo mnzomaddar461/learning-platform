@@ -4,48 +4,6 @@ import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import { useToast } from '../../components/Toast'
 
-// ─── Compiler ────────────────────────────────────────────
-async function runWithWandbox(code, lang, stdin = '') {
-  const compiler = lang === 'cpp' ? 'gcc-head' : 'gcc-head-c'
-  const res = await fetch('https://wandbox.org/api/compile.json', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      compiler, code, stdin,
-      options: lang === 'cpp' ? 'warning,c++17' : 'warning,c11',
-      'compiler-option-raw': lang === 'cpp' ? '-std=c++17' : '-std=c11',
-    }),
-  })
-  const data = await res.json()
-  const stderr = data?.compiler_error || data?.runtime_error || ''
-  const stdout = data?.program_output || ''
-  return { stdout, stderr, hasError: !!stderr && !stdout }
-}
-
-let pyodideInstance = null
-async function runPython(code, stdin = '') {
-  try {
-    if (!pyodideInstance) {
-      if (!window.loadPyodide) {
-        await new Promise((resolve, reject) => {
-          const s = document.createElement('script')
-          s.src = 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js'
-          s.onload = resolve; s.onerror = reject
-          document.head.appendChild(s)
-        })
-      }
-      pyodideInstance = await window.loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/' })
-    }
-    let output = ''
-    pyodideInstance.setStdout({ batched: t => { output += t + '\n' } })
-    pyodideInstance.setStderr({ batched: t => { output += t + '\n' } })
-    await pyodideInstance.runPythonAsync(code)
-    return { stdout: output.trimEnd(), stderr: '', hasError: false }
-  } catch (err) {
-    return { stdout: '', stderr: err.message, hasError: true }
-  }
-}
-
 // ─── CodingLesson Component ───────────────────────────────
 function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast }) {
   const cd = lesson.quiz_data?.[0] || {}
@@ -123,12 +81,12 @@ function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast })
           setSolvedProblems(newSolved)
 
           const newPercent = Math.round((newSolved.size / problems.length) * 100)
-          addToast(`✅ Problem ${activeProblem + 1} সমাধান হয়েছে! (${newSolved.size}/${problems.length})`, 'success', 3000)
+          addToast(`✅ Problem ${activeProblem + 1} সমাধান! (${newSolved.size}/${problems.length})`, 'success', 3000)
 
           if (newPercent >= 70 && !lessonPassed) {
             setLessonPassed(true)
             onComplete()
-            addToast(`🎉 ${newPercent}% সম্পন্ন! Lesson unlock হয়েছে!`, 'success', 5000)
+            addToast(`🎉 ${newPercent}% সম্পন্ন! Lesson unlock!`, 'success', 5000)
           }
         } else if (expected && !isMatch) {
           addToast('❌ Output মিলেনি। আবার চেষ্টা করুন।', 'error', 3000)
@@ -158,11 +116,10 @@ function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast })
 
   return (
     <div className="space-y-4">
-
-      {/* Progress Bar */}
+      {/* Progress */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-gray-400 text-sm">Progress: {solvedProblems.size}/{problems.length} solved</span>
+          <span className="text-gray-400 text-sm">{solvedProblems.size}/{problems.length} solved</span>
           <span className={`text-sm font-bold ${passPercent >= 70 ? 'text-green-400' : 'text-gray-400'}`}>
             {passPercent}% {passPercent >= 70 && '✅'}
           </span>
@@ -189,7 +146,7 @@ function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast })
         ))}
       </div>
 
-      {/* Problem Description Box */}
+      {/* Problem Description */}
       {prob && (
         <div style={{ border: `2px solid ${color}50`, background: color + '08' }} className="rounded-xl p-5">
           <div className="flex items-center gap-2 mb-3">
@@ -197,9 +154,7 @@ function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast })
             <h3 style={{ color }} className="font-bold text-base">{prob.title || `Problem ${activeProblem + 1}`}</h3>
             {isSolved && <span className="text-green-400 text-sm font-bold ml-auto">✅ Solved!</span>}
           </div>
-
           <p className="text-gray-300 text-sm leading-relaxed mb-4 whitespace-pre-wrap">{prob.description}</p>
-
           {(prob.sample_input || prob.sample_output) && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {prob.sample_input && (
@@ -220,16 +175,11 @@ function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast })
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
         {/* Left - Editor */}
         <div className="space-y-4">
-
-          {/* Code Cards */}
           {(prob?.code_cards || []).filter(c => c.label || c.code).length > 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <p className="text-gray-400 text-xs font-semibold mb-3 uppercase tracking-wider">
-                🃏 Code Cards
-              </p>
+              <p className="text-gray-400 text-xs font-semibold mb-3 uppercase tracking-wider">🃏 Code Cards</p>
               <div className="flex flex-wrap gap-2">
                 {(prob?.code_cards || []).filter(c => c.label || c.code).map((card, i) => (
                   <div key={i} className="relative group">
@@ -252,7 +202,6 @@ function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast })
             </div>
           )}
 
-          {/* Editor */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2 bg-gray-800/50 border-b border-gray-700">
               <div className="flex items-center gap-2">
@@ -261,18 +210,14 @@ function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast })
                   <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
                   <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
                 </div>
-                <span className="text-gray-500 text-xs font-semibold font-mono">
-                  💻 {langLabel[language]} Editor — Problem {activeProblem + 1}
-                </span>
+                <span className="text-gray-500 text-xs font-semibold font-mono">💻 {langLabel[language]} Editor — Problem {activeProblem + 1}</span>
               </div>
               <button onClick={() => {
                 const reset = prob?.starter_code || starter_code
                 setCodes(prev => ({ ...prev, [activeProblem]: reset }))
                 setOutputs(prev => ({ ...prev, [activeProblem]: '' }))
                 setErrors(prev => ({ ...prev, [activeProblem]: '' }))
-              }} className="text-gray-500 hover:text-gray-300 text-xs transition">
-                🔄 Reset
-              </button>
+              }} className="text-gray-500 hover:text-gray-300 text-xs transition">🔄 Reset</button>
             </div>
             {header && (
               <div className="px-4 pt-3 pb-1 bg-gray-950 border-b border-gray-800/50 select-none">
@@ -289,7 +234,6 @@ function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast })
             />
           </div>
 
-          {/* Note */}
           {note && (
             <div className="bg-yellow-900/20 border border-yellow-700/30 rounded-xl p-4">
               <p className="text-yellow-400 text-xs font-semibold mb-2">📝 Note:</p>
@@ -310,7 +254,7 @@ function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast })
           <button onClick={handleRun} disabled={isRunning}
             style={{ background: isRunning ? '#374151' : isSolved ? '#15803d' : color }}
             className="w-full py-3.5 disabled:cursor-not-allowed text-white font-bold rounded-xl transition flex items-center justify-center gap-2 text-sm">
-            {isRunning ? '⏳ Compiling...' : isSolved ? `✅ Solved — আবার Run করুন` : `▶ Run ${langLabel[language]}`}
+            {isRunning ? '⏳ Compiling...' : isSolved ? '✅ Solved — আবার Run করুন' : `▶ Run ${langLabel[language]}`}
           </button>
 
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden" style={{ minHeight: '200px' }}>
@@ -333,32 +277,24 @@ function CodingLesson({ lesson, onComplete, onGoNext, onCertificate, addToast })
         </div>
       </div>
 
-      {/* Lesson Passed Banner */}
       {lessonPassed && (
         <div className="bg-green-900/20 border border-green-700/40 rounded-xl p-6 text-center">
           <div className="text-4xl mb-3">🎉</div>
-          <p className="text-green-400 font-bold text-lg mb-2">
-            {passPercent}% Problems সমাধান! Lesson সম্পন্ন।
-          </p>
+          <p className="text-green-400 font-bold text-lg mb-2">{passPercent}% Problems সমাধান! Lesson সম্পন্ন।</p>
           <p className="text-gray-400 text-sm mb-5">
             {solvedProblems.size}/{problems.length} টি problem solve করেছেন।
             {solvedProblems.size < problems.length && ' বাকিগুলোও চেষ্টা করুন!'}
           </p>
           <div className="flex gap-3 justify-center flex-wrap">
             {onGoNext && (
-              <button onClick={onGoNext}
-                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition">
+              <button onClick={onGoNext} className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition">
                 পরের Lesson 🔓 →
               </button>
             )}
             {onCertificate && (
-              <button onClick={onCertificate}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition">
+              <button onClick={onCertificate} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition">
                 🎓 Certificate নিন!
               </button>
-            )}
-            {!onGoNext && !onCertificate && (
-              <p className="text-green-300 text-sm">✓ সব lesson সম্পন্ন!</p>
             )}
           </div>
         </div>
@@ -384,11 +320,19 @@ export default function CourseDetail({ params }) {
   const [quizResult, setQuizResult] = useState(null)
   const [dragAnswers, setDragAnswers] = useState({})
 
-  // Video controls
+  // Video
   const playerRef = useRef(null)
+  const videoRef = useRef(null)
   const [speed, setSpeed] = useState(1)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playerReady, setPlayerReady] = useState(false)
+
+  // Timestamp MCQ
+  const triggeredTimestampsRef = useRef(new Set())
+  const [triggeredTimestamps, setTriggeredTimestamps] = useState(new Set())
+  const [timestampPopup, setTimestampPopup] = useState(null)
+  const [timestampAnswer, setTimestampAnswer] = useState(null)
+  const [timestampResult, setTimestampResult] = useState(null)
 
   useEffect(() => {
     fetch('/api/courses').then(r => r.json()).then(data => {
@@ -419,9 +363,14 @@ export default function CourseDetail({ params }) {
     setDragAnswers({})
     setQuizResult(null)
     setShowEndPopup(false)
+    triggeredTimestampsRef.current = new Set()
+    setTriggeredTimestamps(new Set())
+    setTimestampPopup(null)
+    setTimestampAnswer(null)
+    setTimestampResult(null)
   }, [activeLesson, lessons.length])
 
-  // YouTube IFrame API
+  // YouTube IFrame API load
   useEffect(() => {
     if (!window.YT) {
       const tag = document.createElement('script')
@@ -430,20 +379,51 @@ export default function CourseDetail({ params }) {
     }
   }, [])
 
+  // YouTube player init
   useEffect(() => {
     if (lessons.length === 0 || activeTab !== 'video') return
     const lesson = lessons[activeLesson]
-    if (!lesson?.video_id) return
+    if (!lesson?.video_id || lesson?.video_url) return
     setPlayerReady(false)
     setIsPlaying(false)
 
     const initPlayer = () => {
       if (playerRef.current) { try { playerRef.current.destroy() } catch {} playerRef.current = null }
+      if (window._ytTimeInterval) { clearInterval(window._ytTimeInterval); window._ytTimeInterval = null }
+
       playerRef.current = new window.YT.Player('yt-player', {
         videoId: lesson.video_id,
         playerVars: { rel: 0, modestbranding: 1 },
         events: {
-          onReady: e => { setPlayerReady(true); e.target.setPlaybackRate(speed) },
+          onReady: e => {
+            setPlayerReady(true)
+            e.target.setPlaybackRate(speed)
+
+            window._ytTimeInterval = setInterval(() => {
+              if (!playerRef.current) return
+              try {
+                const state = playerRef.current.getPlayerState()
+                if (state !== 1) return
+                const currentTime = playerRef.current.getCurrentTime()
+                const tqs = lesson.timestamp_quizzes
+                if (!tqs?.length) return
+
+                for (const tq of tqs) {
+                  if (!tq.timestamp || triggeredTimestampsRef.current.has(tq.id)) continue
+                  const parts = tq.timestamp.split(':').map(Number)
+                  const targetSeconds = parts.length === 2 ? parts[0] * 60 + parts[1] : parts[0]
+
+                  if (Math.abs(currentTime - targetSeconds) < 1.5) {
+                    playerRef.current.pauseVideo()
+                    triggeredTimestampsRef.current.add(tq.id)
+                    setTriggeredTimestamps(new Set(triggeredTimestampsRef.current))
+                    setTimestampPopup(tq)
+                    break
+                  }
+                }
+              } catch {}
+            }, 500)
+          },
           onStateChange: e => setIsPlaying(e.data === window.YT.PlayerState.PLAYING)
         }
       })
@@ -451,7 +431,11 @@ export default function CourseDetail({ params }) {
 
     if (window.YT?.Player) initPlayer()
     else window.onYouTubeIframeAPIReady = initPlayer
-    return () => { if (playerRef.current) { try { playerRef.current.destroy() } catch {} playerRef.current = null } }
+
+    return () => {
+      if (playerRef.current) { try { playerRef.current.destroy() } catch {} playerRef.current = null }
+      if (window._ytTimeInterval) { clearInterval(window._ytTimeInterval); window._ytTimeInterval = null }
+    }
   }, [activeLesson, lessons, activeTab])
 
   const togglePlay = () => {
@@ -565,7 +549,11 @@ export default function CourseDetail({ params }) {
     }
   }
 
-  if (loading) return <div className="min-h-screen bg-gray-950 flex items-center justify-center"><div className="text-white">লোড হচ্ছে...</div></div>
+  if (loading) return (
+    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="text-white">লোড হচ্ছে...</div>
+    </div>
+  )
 
   if (!course || lessons.length === 0) return (
     <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-4">
@@ -586,18 +574,87 @@ export default function CourseDetail({ params }) {
             <div className="text-6xl mb-4">🎬</div>
             <h2 className="text-white font-black text-2xl mb-3">Lesson শেষ!</h2>
             <p className="text-gray-400 mb-6">{lesson.title}</p>
-            <div className="bg-gray-800 rounded-2xl p-4 mb-8 text-left">
-              <h4 className="text-purple-400 font-bold text-sm mb-2 uppercase tracking-wider">
-                {lesson.quiz_type === 'mcq' ? '🧠 MCQ Quiz' : '📋 Dropdown Problem'}
-              </h4>
-              <p className="text-gray-300 text-sm">৭০% পেলে পরের lesson unlock হবে।</p>
-            </div>
             <div className="flex gap-3 justify-center">
               <button onClick={() => setShowEndPopup(false)} className="bg-gray-700 hover:bg-gray-600 text-gray-300 px-5 py-3 rounded-xl text-sm transition">পরে করব</button>
               <button onClick={startQuiz} className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-xl font-bold transition">
                 {lesson.quiz_type === 'mcq' ? '🧠 Quiz দিন' : '📋 সমাধান করুন'} →
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Timestamp MCQ Popup */}
+      {timestampPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backdropFilter: 'blur(8px)', background: 'rgba(0,0,0,0.8)' }}>
+          <div className="bg-gray-900 border border-yellow-700/50 rounded-2xl p-8 max-w-lg w-full mx-4 shadow-2xl">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-yellow-400 text-lg">⏱</span>
+              <span className="text-yellow-400 text-sm font-semibold uppercase tracking-wider">
+                Checkpoint Quiz — {timestampPopup.timestamp}
+              </span>
+            </div>
+            <h3 className="text-white font-bold text-xl mb-6">{timestampPopup.question}</h3>
+            <div className="space-y-3 mb-6">
+              {timestampPopup.options.map((opt, oi) => (
+                <button key={oi} onClick={() => { if (timestampResult) return; setTimestampAnswer(oi) }}
+                  className={`w-full text-left px-5 py-3 rounded-xl border transition ${
+                    timestampAnswer === oi
+                      ? timestampResult
+                        ? oi === timestampPopup.correct ? 'bg-green-900/30 border-green-500 text-green-300' : 'bg-red-900/30 border-red-500 text-red-300'
+                        : 'bg-purple-600/20 border-purple-500 text-white'
+                      : timestampResult && oi === timestampPopup.correct ? 'bg-green-900/30 border-green-500 text-green-300'
+                      : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500'
+                  }`}>
+                  <span className="text-gray-500 mr-3">{['A','B','C','D'][oi]}.</span>{opt}
+                </button>
+              ))}
+            </div>
+
+            {!timestampResult ? (
+              <button onClick={() => {
+                if (timestampAnswer === null) return
+                const correct = timestampAnswer === timestampPopup.correct
+                setTimestampResult(correct)
+                if (!correct) {
+                  setTimeout(() => {
+                    const parts = timestampPopup.timestamp.split(':').map(Number)
+                    const backTo = Math.max(0, (parts.length === 2 ? parts[0] * 60 + parts[1] : parts[0]) - 30)
+                    if (videoRef.current) {
+                      videoRef.current.currentTime = backTo
+                      videoRef.current.play()
+                    }
+                    if (playerRef.current) {
+                      try { playerRef.current.seekTo(backTo); playerRef.current.playVideo() } catch {}
+                    }
+                    setTimestampAnswer(null)
+                    setTimestampResult(null)
+                    setTimestampPopup(null)
+                  }, 1500)
+                }
+              }} disabled={timestampAnswer === null}
+                className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:bg-gray-700 disabled:cursor-not-allowed text-gray-900 font-bold py-3 rounded-xl transition">
+                Submit করুন
+              </button>
+            ) : timestampResult ? (
+              <div className="text-center">
+                <p className="text-green-400 font-bold text-lg mb-4">✅ সঠিক! Video চলবে।</p>
+                <button onClick={() => {
+                  setTimestampPopup(null)
+                  setTimestampAnswer(null)
+                  setTimestampResult(null)
+                  if (videoRef.current) videoRef.current.play()
+                  if (playerRef.current) { try { playerRef.current.playVideo() } catch {} }
+                }} className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-xl font-bold transition">
+                  ▶ Video চালু করুন
+                </button>
+              </div>
+            ) : (
+              <div className="text-center">
+                <p className="text-red-400 font-bold mb-2">❌ ভুল! Video ৩০ সেকেন্ড পিছিয়ে যাবে।</p>
+                <p className="text-gray-400 text-sm">আবার চেষ্টা করুন...</p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -665,11 +722,77 @@ export default function CourseDetail({ params }) {
             {/* Video Tab */}
             {activeTab === 'video' && !isCodingLesson && (
               <div>
-                {lesson.video_id ? (
+                {lesson.video_url ? (
+                  <div>
+                    <div className="rounded-2xl overflow-hidden bg-black mb-4 aspect-video">
+                      <video ref={videoRef} src={lesson.video_url} controls className="w-full h-full"
+                        onTimeUpdate={() => {
+                          if (!videoRef.current) return
+                          const tqs = lesson.timestamp_quizzes
+                          if (!tqs?.length) return
+                          const currentTime = videoRef.current.currentTime
+
+                          for (const tq of tqs) {
+                            if (!tq.timestamp || triggeredTimestampsRef.current.has(tq.id)) continue
+                            const parts = tq.timestamp.split(':').map(Number)
+                            const targetSeconds = parts.length === 2 ? parts[0] * 60 + parts[1] : parts[0]
+
+                            if (Math.abs(currentTime - targetSeconds) < 1.5) {
+                              videoRef.current.pause()
+                              triggeredTimestampsRef.current.add(tq.id)
+                              setTriggeredTimestamps(new Set(triggeredTimestampsRef.current))
+                              setTimestampPopup(tq)
+                              break
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {lesson.timestamp_quizzes?.length > 0 && (
+                      <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 mb-4">
+                        <p className="text-gray-400 text-xs mb-2">⏱ Checkpoint Quiz:</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {lesson.timestamp_quizzes.map((tq, i) => (
+                            <span key={i} className={`text-xs px-2 py-1 rounded-full font-semibold ${triggeredTimestamps.has(tq.id) ? 'bg-green-900/30 text-green-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
+                              {triggeredTimestamps.has(tq.id) ? '✓' : '⏱'} {tq.timestamp}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mb-4">
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-2">
+                          <button onClick={goPrev} disabled={activeLesson === 0} className="bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-gray-300 px-3 py-2 rounded-lg text-sm transition">◀ আগের</button>
+                          <button onClick={() => { if (!isLocked(activeLesson + 1)) goToLesson(activeLesson + 1) }}
+                            disabled={activeLesson === lessons.length - 1 || isLocked(activeLesson + 1)}
+                            className="bg-gray-800 hover:bg-gray-700 disabled:opacity-40 text-gray-300 px-3 py-2 rounded-lg text-sm transition">পরের ▶</button>
+                        </div>
+                        <button onClick={handleVideoEnd} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">✅ ভিডিও শেষ</button>
+                      </div>
+                    </div>
+                  </div>
+                ) : lesson.video_id ? (
                   <div>
                     <div className="rounded-2xl overflow-hidden bg-black mb-4 aspect-video">
                       <div id="yt-player" className="w-full h-full" />
                     </div>
+
+                    {lesson.timestamp_quizzes?.length > 0 && (
+                      <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 mb-4">
+                        <p className="text-gray-400 text-xs mb-2">⏱ Checkpoint Quiz:</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {lesson.timestamp_quizzes.map((tq, i) => (
+                            <span key={i} className={`text-xs px-2 py-1 rounded-full font-semibold ${triggeredTimestamps.has(tq.id) ? 'bg-green-900/30 text-green-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
+                              {triggeredTimestamps.has(tq.id) ? '✓' : '⏱'} {tq.timestamp}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mb-4">
                       <div className="flex items-center justify-between flex-wrap gap-3">
                         <div className="flex items-center gap-2">
@@ -762,7 +885,6 @@ export default function CourseDetail({ params }) {
             {/* Quiz Tab */}
             {activeTab === 'quiz' && (
               <div>
-                {/* Coding Lesson */}
                 {isCodingLesson ? (
                   <CodingLesson
                     lesson={lesson}
@@ -795,7 +917,6 @@ export default function CourseDetail({ params }) {
                   />
                 ) : (
                   <>
-                    {/* Idle */}
                     {quizState === 'idle' && (
                       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-10 text-center">
                         {!(lesson.quiz_data?.length) || lesson.quiz_type === 'none' ? (
@@ -827,7 +948,6 @@ export default function CourseDetail({ params }) {
                       </div>
                     )}
 
-                    {/* MCQ Taking */}
                     {quizState === 'taking' && lesson.quiz_type === 'mcq' && (
                       <div className="space-y-6">
                         <div className="flex items-center justify-between">
@@ -847,7 +967,7 @@ export default function CourseDetail({ params }) {
                               {(q.options || []).map((opt, oi) => (
                                 <button key={oi} onClick={() => setSelectedAnswers({ ...selectedAnswers, [qi]: oi })}
                                   className={`w-full text-left px-5 py-3 rounded-xl border transition ${selectedAnswers[qi] === oi ? 'bg-purple-600/20 border-purple-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500'}`}>
-                                  <span className="text-gray-500 mr-3">{['A', 'B', 'C', 'D'][oi]}.</span>{opt}
+                                  <span className="text-gray-500 mr-3">{['A','B','C','D'][oi]}.</span>{opt}
                                 </button>
                               ))}
                             </div>
@@ -860,7 +980,6 @@ export default function CourseDetail({ params }) {
                       </div>
                     )}
 
-                    {/* Dropdown Taking */}
                     {quizState === 'taking' && lesson.quiz_type === 'dropdown' && (
                       <div className="space-y-6">
                         <h2 className="text-white font-bold text-xl">📋 Dropdown Problem</h2>
@@ -885,7 +1004,6 @@ export default function CourseDetail({ params }) {
                       </div>
                     )}
 
-                    {/* Result */}
                     {(quizState === 'passed' || quizState === 'failed') && quizResult && (
                       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-10 text-center">
                         <div className="text-6xl mb-4">{quizResult.passed ? '🎉' : '😔'}</div>
