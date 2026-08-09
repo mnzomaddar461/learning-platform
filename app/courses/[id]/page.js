@@ -599,12 +599,17 @@ export default function CourseDetail({ params }) {
               {timestampPopup.options.map((opt, oi) => (
                 <button key={oi} onClick={() => { if (timestampResult) return; setTimestampAnswer(oi) }}
                   className={`w-full text-left px-5 py-3 rounded-xl border transition ${
-                    timestampAnswer === oi
-                      ? timestampResult
-                        ? oi === timestampPopup.correct ? 'bg-green-900/30 border-green-500 text-green-300' : 'bg-red-900/30 border-red-500 text-red-300'
-                        : 'bg-purple-600/20 border-purple-500 text-white'
-                      : timestampResult && oi === timestampPopup.correct ? 'bg-green-900/30 border-green-500 text-green-300'
-                      : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500'
+                    timestampResult === false
+                      ? timestampAnswer === oi
+                        ? 'bg-red-900/30 border-red-500 text-red-300'
+                        : 'bg-gray-800 border-gray-700 text-gray-400'
+                      : timestampResult === true
+                        ? oi === timestampPopup.correct
+                          ? 'bg-green-900/30 border-green-500 text-green-300'
+                          : 'bg-gray-800 border-gray-700 text-gray-400'
+                        : timestampAnswer === oi
+                          ? 'bg-purple-600/20 border-purple-500 text-white'
+                          : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500'
                   }`}>
                   <span className="text-gray-500 mr-3">{['A','B','C','D'][oi]}.</span>{opt}
                 </button>
@@ -616,20 +621,25 @@ export default function CourseDetail({ params }) {
                 if (timestampAnswer === null) return
                 const correct = timestampAnswer === timestampPopup.correct
                 setTimestampResult(correct)
+
                 if (!correct) {
+                  // ভুল হলে ১.৫ সেকেন্ড error দেখিয়ে video পিছিয়ে দাও
+                  // কিন্তু popup বন্ধ করো না — আবার try করতে হবে
                   setTimeout(() => {
                     const parts = timestampPopup.timestamp.split(':').map(Number)
                     const backTo = Math.max(0, (parts.length === 2 ? parts[0] * 60 + parts[1] : parts[0]) - 30)
+
+                    // Video পিছিয়ে দাও কিন্তু play করো না
                     if (videoRef.current) {
                       videoRef.current.currentTime = backTo
-                      videoRef.current.play()
                     }
                     if (playerRef.current) {
-                      try { playerRef.current.seekTo(backTo); playerRef.current.playVideo() } catch {}
+                      try { playerRef.current.seekTo(backTo) } catch {}
                     }
+
+                    // Popup রাখো, answer reset করো, আবার try করার সুযোগ দাও
                     setTimestampAnswer(null)
                     setTimestampResult(null)
-                    setTimestampPopup(null)
                   }, 1500)
                 }
               }} disabled={timestampAnswer === null}
@@ -638,7 +648,7 @@ export default function CourseDetail({ params }) {
               </button>
             ) : timestampResult ? (
               <div className="text-center">
-                <p className="text-green-400 font-bold text-lg mb-4">✅ সঠিক! Video চলবে।</p>
+                <p className="text-green-400 font-bold text-lg mb-4">✅ সঠিক! Video চালিয়ে যান।</p>
                 <button onClick={() => {
                   setTimestampPopup(null)
                   setTimestampAnswer(null)
@@ -651,8 +661,8 @@ export default function CourseDetail({ params }) {
               </div>
             ) : (
               <div className="text-center">
-                <p className="text-red-400 font-bold mb-2">❌ ভুল! Video ৩০ সেকেন্ড পিছিয়ে যাবে।</p>
-                <p className="text-gray-400 text-sm">আবার চেষ্টা করুন...</p>
+                <p className="text-red-400 font-bold mb-2">❌ ভুল উত্তর!</p>
+                <p className="text-gray-400 text-sm">Video ৩০ সেকেন্ড পিছিয়ে যাবে। সঠিক উত্তর দিলেই এগোতে পারবেন।</p>
               </div>
             )}
           </div>
